@@ -49,6 +49,15 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         df["Stoch_K"] = np.nan
         df["Stoch_D"] = np.nan
 
+    # StochRSI (عزم دقيق لتوقيت الدخول والخروج)
+    try:
+        srsi = ta.momentum.StochRSIIndicator(close_s, window=14, smooth1=3, smooth2=3)
+        df["StochRSI_K"] = srsi.stochrsi_k() * 100
+        df["StochRSI_D"] = srsi.stochrsi_d() * 100
+    except:
+        df["StochRSI_K"] = np.nan
+        df["StochRSI_D"] = np.nan
+
     # MACD
     macd = ta.trend.MACD(close_s)
     df["MACD"] = macd.macd()
@@ -278,6 +287,8 @@ def get_last_signals(df: pd.DataFrame):
         "VWMA20": float(last["VWMA20"]) if "VWMA20" in df.columns else np.nan,
         "Stoch_K": float(last["Stoch_K"]) if "Stoch_K" in df.columns else np.nan,
         "Stoch_D": float(last["Stoch_D"]) if "Stoch_D" in df.columns else np.nan,
+        "StochRSI_K": float(last["StochRSI_K"]) if "StochRSI_K" in df.columns else np.nan,
+        "StochRSI_D": float(last["StochRSI_D"]) if "StochRSI_D" in df.columns else np.nan,
         "Vol_Ratio": float(last["Vol_Ratio"]) if "Vol_Ratio" in df.columns else np.nan,
         "Turnover_M": round(turnover_m, 2),
         "Turnover_MA20_M": round(turnover_ma20_m, 2),

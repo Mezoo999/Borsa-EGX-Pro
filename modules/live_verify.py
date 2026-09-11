@@ -40,22 +40,42 @@ def fetch_investing_price(symbol: str, timeout=8):
     except:
         return None
 
-def egx_market_status():
-    """حالة السوق المصري (الأحد-الخميس 10:00-14:30 بتوقيت القاهرة)"""
+def _cairo_now():
+    """التوقيت الرسمي للقاهرة — مع مراعاة التوقيت الصيفي المصري (من آخر جمعة في أبريل إلى آخر خميس في أكتوبر)."""
     from datetime import datetime, timezone, timedelta
-    # توقيت القاهرة UTC+3
-    now_cairo = datetime.now(timezone(timedelta(hours=3)))
+    try:
+        from zoneinfo import ZoneInfo
+        return datetime.now(ZoneInfo("Africa/Cairo"))
+    except Exception:
+        pass
+    # fallback: حساب التوقيت الصيفي يدوياً (مصر أعادته منذ 2023)
+    now_utc = datetime.now(timezone.utc)
+    year = now_utc.year
+    # آخر جمعة في أبريل
+    d = datetime(year, 4, 30, tzinfo=timezone.utc)
+    dst_start = d - timedelta(days=(d.weekday() - 4) % 7)
+    dst_start = dst_start.replace(hour=0)
+    # آخر خميس في أكتوبر
+    d = datetime(year, 10, 31, tzinfo=timezone.utc)
+    dst_end = d - timedelta(days=(d.weekday() - 3) % 7)
+    dst_end = dst_end.replace(hour=23, minute=59)
+    offset = 3 if dst_start <= now_utc <= dst_end else 2
+    return now_utc.astimezone(timezone(timedelta(hours=offset)))
+
+
+def egx_market_status():
+    """حالة السوق المصري (الأحد-الخميس 10:00-14:30 بتوقيت القاهرة الرسمي)."""
+    now_cairo = _cairo_now()
     weekday = now_cairo.weekday()  # 0=Mon ... 6=Sun
-    # EGX: الأحد=6, الإثنين=0 ... الخميس=3
-    # مفتوح الأحد (6) إلى الخميس (3)
-    is_weekend = weekday in [4,5]  # الجمعة والسبت
-    hour = now_cairo.hour + now_cairo.minute/60
+    # EGX: مفتوح الأحد (6) إلى الخميس (3) — عطلة الجمعة والسبت
+    is_weekend = weekday in [4, 5]
+    hour = now_cairo.hour + now_cairo.minute / 60
     is_trading_hours = 10 <= hour <= 14.5
     if is_weekend:
         return {"open": False, "reason": "عطلة نهاية الأسبوع (الجمعة-السبت)", "next": "الأحد 10:00"}
     if not is_trading_hours:
         if hour < 10:
-            return {"open": False, "reason": f"قبل الافتتاح (يفتح 10:00)", "next": "اليوم 10:00"}
+            return {"open": False, "reason": "قبل الافتتاح (يفتح 10:00)", "next": "اليوم 10:00"}
         else:
             return {"open": False, "reason": "بعد الإغلاق (أغلق 14:30)", "next": "غداً 10:00"}
     return {"open": True, "reason": "السوق مفتوح الآن (10:00-14:30)", "next": "يغلق 14:30"}

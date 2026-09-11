@@ -38,6 +38,7 @@ from modules.expert_advisor import (generate_expert_verdict, analyze_wyckoff_pha
 import modules.storage as store
 import modules.tv_data as tvd
 import modules.tv_widgets as tv
+import modules.news as newsfeed
 
 # ============================================================
 # إعداد الصفحة
@@ -625,6 +626,38 @@ with tab_market:
 
     st.markdown("---")
 
+    # ===== أداء القطاعات اليوم (من أسعار TradingView الحقيقية) =====
+    st.markdown("#### 🏙️ أداء القطاعات اليوم")
+    try:
+        reg_s = symbol_registry()
+        snap_s = tvd.snapshot()
+        sec_acc = {}
+        for sym_m, meta_m in reg_s.items():
+            tv_mm = meta_m.get("tv") or snap_s.get(sym_m.replace(".CA", ""))
+            if tv_mm and meta_m.get("sector"):
+                sec_acc.setdefault(meta_m["sector"], []).append(tv_mm["change_pct"])
+        sec_rows = sorted(((s_, sum(v_) / len(v_), len(v_)) for s_, v_ in sec_acc.items() if len(v_) >= 3),
+                          key=lambda x_: x_[1], reverse=True)
+        if sec_rows:
+            fig_sec = go.Figure(go.Bar(
+                x=[r_[1] for r_ in sec_rows][::-1],
+                y=[f"{r_[0]} ({r_[2]} سهم)" for r_ in sec_rows][::-1],
+                orientation="h",
+                marker_color=["#00c853" if v_ > 0 else ("#ff5c76" if v_ < 0 else "#546e7a") for v_ in [r_[1] for r_ in sec_rows][::-1]],
+                text=[f"{v_:+.2f}%" for v_ in [r_[1] for r_ in sec_rows][::-1]],
+                textposition="auto",
+            ))
+            fig_sec.update_layout(height=max(300, 36 * len(sec_rows)), template="plotly_dark",
+                                  paper_bgcolor="#0d1119", margin=dict(l=10, r=30, t=10, b=10))
+            st.plotly_chart(fig_sec, use_container_width=True)
+            st.caption("متوسط تغير أسهم كل قطاع اليوم — محسوب من أسعار TradingView لكل أسهم البورصة")
+        else:
+            st.caption("جاري حساب أداء القطاعات...")
+    except Exception:
+        st.caption("جاري حساب أداء القطاعات...")
+
+    st.markdown("---")
+
     # الفاحص الشامل
     st.markdown("#### 🌍 فحص السوق الشامل")
     sc1, sc2, sc3 = st.columns([1.2, 1, 1])
@@ -753,6 +786,12 @@ with tab_advisor:
         df_hc = pd.DataFrame()
 
     if not df_hc.empty:
+        # تسجيل آلي في السجل الموثق — مرة كل 7 أيام لكل سهم (ملف إنجاز دائم)
+        for _, r in df_hc.iterrows():
+            if not store.has_recent_rec(USER_STORE, r["الرمز"]):
+                store.add_rec(USER_STORE, r["الرمز"], cname(r["الرمز"])[:40],
+                              float(r["السعر"]), float(r.get("وقف خسارة", 0) or 0),
+                              float(r.get("هدف1", 0) or 0), int(r["درجة فنية"]))
         hc_cols = st.columns(len(df_hc))
         for col, (_, r) in zip(hc_cols, df_hc.iterrows()):
             sym = r["الرمز"]
@@ -891,6 +930,53 @@ with tab_advisor:
         st.download_button("⬇️ تصدير التوصيات CSV", csv_adv, "egx_recommendations.csv", "text/csv", use_container_width=True)
     else:
         st.info("المحرك يعمل تلقائياً — سيظهر الكروت بعد لحظات")
+
+    # ===== سجل التوصيات — ملف الإنجاز الموثق =====
+    st.markdown("---")
+    st.markdown("#### 📜 سجل التوصيات — ملف الإنجاز الموثق")
+    st.caption("كل توصية عالية الثقة تُسجَّل آلياً بتاريخها وسعرها ولا تُحذف أبداً — المنصة تقيس نفسها بالأرقام لا بالوعود")
+    recs = USER_STORE.get("rec_log", [])
+    if not recs:
+        st.caption("السجل فارغ — سيُملأ تلقائياً مع أول فحص يظهر فرصاً عالية الثقة")
+    else:
+        snap_r = tvd.snapshot()
+        rows_r = []
+        for rec in recs:
+            tv_rr = snap_r.get(rec["symbol"].replace(".CA", ""))
+            now_p = tv_rr["close"] if tv_rr else None
+            entry_r = float(rec["entry"]); stop_r = float(rec["stop"]); t1_r = float(rec["t1"])
+            pl_r = (now_p - entry_r) / entry_r * 100 if now_p else None
+            if now_p is None:
+                status_r = "— بلا بيانات"
+            elif now_p <= stop_r:
+                status_r = "🚨 ضرب الوقف"
+            elif now_p >= t1_r:
+                status_r = "🎯 حققت الهدف"
+            else:
+                status_r = "⏳ جارية"
+            rows_r.append({"التاريخ": rec["date"], "الرمز": rec["symbol"].replace(".CA", ""),
+                           "دخول": round(entry_r, 2),
+                           "الآن": round(now_p, 2) if now_p else None,
+                           "العائد%": round(pl_r, 2) if pl_r is not None else None,
+                           "هدف1": round(t1_r, 2), "وقف": round(stop_r, 2),
+                           "الدرجة": rec.get("score"), "الحالة": status_r})
+        df_rec = pd.DataFrame(rows_r)
+        closed_r = df_rec[df_rec["الحالة"].isin(["🚨 ضرب الوقف", "🎯 حققت الهدف"])]
+        if not closed_r.empty:
+            wins_r = int((closed_r["الحالة"] == "🎯 حققت الهدف").sum())
+            tr1, tr2, tr3 = st.columns(3)
+            tr1.metric("توصيات مُغلقة", len(closed_r))
+            tr2.metric("حققت الهدف", wins_r)
+            tr3.metric("نسبة النجاح الفعلية", f"{wins_r / len(closed_r) * 100:.0f}%")
+        st.dataframe(df_rec.sort_values("التاريخ", ascending=False), use_container_width=True,
+                     hide_index=True, height=260,
+                     column_config={
+                         "العائد%": st.column_config.NumberColumn(format="%.2f%%"),
+                         "دخول": st.column_config.NumberColumn(format="%.2f"),
+                         "الآن": st.column_config.NumberColumn(format="%.2f"),
+                         "هدف1": st.column_config.NumberColumn(format="%.2f"),
+                         "وقف": st.column_config.NumberColumn(format="%.2f"),
+                     })
     st.caption("⚠️ استرشادية مبنية على التحليل الفني — لا تخاطر بأكثر من 2% من رأس مالك في صفقة واحدة")
 
 # ============================================================
@@ -977,7 +1063,7 @@ with tab_detail:
             m2.metric("السيولة اليومية", f"{turnover_val:.1f}M ج.م" if turnover_val else f"{int(df['Volume'].iloc[-1]):,}")
             mcap = info.get("marketCap") or (tv_row or {}).get("market_cap")
             m3.metric("القيمة السوقية", f"{mcap/1e9:,.1f}B" if mcap else "—")
-            pe_disp = fund_pe if fund_pe else info.get("trailingPE")
+            pe_disp = info.get("trailingPE") or fund_pe  # البيانات اللحظية أولاً، المرجعية احتياط
             m4.metric("مكرر الربحية P/E", f"{pe_disp:.1f}" if pe_disp else "—")
             if div_yield_pct and div_yield_pct > 0:
                 m5.metric("عائد التوزيعات", f"{div_yield_pct:.1f}%")
@@ -1119,6 +1205,17 @@ with tab_detail:
                     st.markdown(f'<div style="background:rgba(255,61,87,0.06); border:1px solid rgba(255,61,87,0.25); border-radius:8px; padding:0.5rem 0.8rem; margin-bottom:0.4rem; font-size:0.85rem; color:#e0e0e0;">⚠️ {w}</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div style="background:rgba(0,200,83,0.05); border-radius:8px; padding:0.5rem 0.8rem; font-size:0.85rem; color:#81c784;">✓ لا توجد تحذيرات سلبية حرجة على السهم حالياً.</div>', unsafe_allow_html=True)
+
+        # ===== الأخبار والإفصاحات الحقيقية (Google News) =====
+        with st.expander("📰 آخر أخبار وإفصاحات السهم — حقيقية ومحدّثة", expanded=False):
+            news_items = newsfeed.fetch_news(f'"{company_name}" OR {symbol.replace(".CA","")} البورصة المصرية')
+            if not news_items:
+                st.caption("لا توجد أخبار حديثة متاحة لهذا السهم الآن")
+            else:
+                for it in news_items:
+                    src_html = f' — <span style="color:#7d8db1;">{it["source"]}</span>' if it.get("source") else ""
+                    st.markdown(f'<div style="border-right:3px solid #2962ff; padding:0.4rem 0.7rem; margin-bottom:0.35rem; background:rgba(41,98,255,0.04); border-radius:6px;"><a href="{it["link"]}" target="_blank" style="color:#90caf9; text-decoration:none; font-size:0.85rem;">{it["title"]}</a><div style="color:#7d8db1; font-size:0.68rem; margin-top:0.15rem;">📅 {it["pub"]}{src_html}</div></div>', unsafe_allow_html=True)
+            st.caption("⚠️ عناوين حقيقية من مصادر إخبارية عامة — راجع الإفصاح الرسمي للبورصة قبل أي قرار")
 
         st.markdown("---")
 
@@ -1368,6 +1465,8 @@ with tab_detail:
                 ["EMA 9/21", f"{last_signals.get('EMA9',0):,.2f} / {last_signals.get('EMA21',0):,.2f}", "زخم قصير"],
                 ["VWAP", f"{last_signals.get('VWAP',0):,.2f}", "فوقه = صاعد"],
                 ["MFI", f"{last_signals.get('MFI',0):.1f}", "سيولة — <20 بيع | >80 شراء"],
+                ["StochRSI K/D", f"{last_signals.get('StochRSI_K',0):.0f}/{last_signals.get('StochRSI_D',0):.0f}", "<20 تشبع بيعي | >80 تشبع شرائي"],
+                ["OBV (تدفق الأموال)", "صاعد ✓" if last_signals.get('OBV', 0) > last_signals.get('OBV_MA', 0) else "هابط ✗", "هل السيولة تدعم الاتجاه؟"],
                 ["حجم/متوسط", f"{last_signals.get('Vol_Ratio',0):.1f}x", ">1.5 حجم مرتفع"],
                 ["ATR", f"{last_signals.get('ATR',0):,.2f}", f"تقلب {(last_signals.get('ATR',0)/last_close*100):.1f}%" if last_close else ""],
             ], columns=["المؤشر", "القيمة", "الملاحظة"])
@@ -1406,6 +1505,8 @@ with tab_detail:
                 f4.metric("العائد على الملكية ROE", f"{metrics.get('العائد_على_حقوق_الملكية_ROE',0)*100:.0f}%" if metrics.get("العائد_على_حقوق_الملكية_ROE") is not None else "—")
                 f5.metric("هامش صافي الربح", f"{metrics.get('هامش_الربح',0)*100:.0f}%" if metrics.get("هامش_الربح") is not None else "—")
                 f6.metric("القيمة السوقية", f"{metrics.get('القيمة_السوقية',0)/1e9:.1f}B ج.م" if metrics.get("القيمة_السوقية") else "—")
+
+                st.caption("⚠️ الشفافية: مكرر الربحية من بيانات Yahoo اللحظية • التوزيعات وROE والجدارة من قاعدة مرجعية محلية مدققة يدوياً (قد لا تعكس آخر إفصاح) — قارن دائماً مع آخر إفصاح رسمي للشركة قبل القرار")
 
                 st.markdown("---")
 

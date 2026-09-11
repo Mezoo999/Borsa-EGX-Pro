@@ -10,6 +10,7 @@ DEFAULT_STORE = {
     "portfolio": {},          # symbol -> {shares, avg_cost, date}
     "alerts": {},             # symbol -> {"above": price, "below": price}
     "ideas": [],              # صفقات مراقَبة: {id, symbol, entry, stop, t1, t2, added}
+    "rec_log": [],            # سجل التوصيات الموثق: {id, symbol, name, entry, stop, t1, score, date, note}
     "last_seen": {},
     "settings": {"capital": 100000, "risk_pct": 2.0, "max_pct": 10.0},
 }
@@ -76,6 +77,28 @@ def add_idea(store, symbol, entry, stop, t1, t2=None):
 def remove_idea(store, idea_id):
     store["ideas"] = [i for i in store.get("ideas", []) if i.get("id") != idea_id]
     save_store(store)
+
+def add_rec(store, symbol, name, entry, stop, t1, score, note=""):
+    """تسجيل توصية في السجل الموثق — لا يُحذف أبداً (ملف إنجاز دائم)."""
+    store.setdefault("rec_log", []).append({
+        "id": datetime.now().strftime("%Y%m%d%H%M%S%f"),
+        "symbol": symbol,
+        "name": name,
+        "entry": float(entry),
+        "stop": float(stop),
+        "t1": float(t1),
+        "score": int(score),
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "note": note,
+    })
+    save_store(store)
+
+def has_recent_rec(store, symbol, days: int = 7) -> bool:
+    """منع تكرار تسجيل نفس السهم خلال فترة قصيرة."""
+    from datetime import timedelta
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    return any(r.get("symbol") == symbol and r.get("date", "") >= cutoff
+               for r in store.get("rec_log", []))
 
 def buy_position(store, symbol, shares, price):
     """إضافة/دمج مركز شراء في المحفظة."""

@@ -161,6 +161,21 @@ def one(symbol: str):
     return snapshot().get(symbol.replace(".CA", ""))
 
 
+def stock_tier(symbol: str) -> str:
+    """تصنيف آلي للسهم حسب القيمة السوقية الحقيقية من TradingView — بلا قوائم ثابتة يدوية."""
+    row = one(symbol)
+    if not row:
+        return "متوسط"
+    mcap = row.get("market_cap") or 0
+    if mcap >= 30e9:
+        return "مؤسسي قيادي 🏛️"
+    if mcap >= 5e9:
+        return "شركة كبيرة"
+    if mcap >= 1e9:
+        return "متوسط"
+    return "مضاربي صغير ⚠️"
+
+
 def get_registry() -> dict:
     """سجل الأسهم الحقيقي: {symbol.CA: {"name":.., "sector":.., "tv": row}}.
 

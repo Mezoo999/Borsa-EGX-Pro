@@ -5,11 +5,12 @@ from .technical import add_indicators, get_last_signals
 from .signals import generate_signal
 
 
-def backtest_signals(df: pd.DataFrame, hold_days: int = 5, threshold: int = 4) -> dict:
+def backtest_signals(df: pd.DataFrame, hold_days: int = 5, threshold: int = 4,
+                     round_trip_fee_pct: float = 0.55) -> dict:
     """
-    اختبار الاستراتيجية على البيانات التاريخية.
-    لكل يوم: لو الإشارة كانت شراء (score >= threshold) نحسب العائد بعد hold_days أيام.
-    ترجع نسبة النجاح ومتوسط الربح.
+    اختبار الاستراتيجية على البيانات التاريخية — صافي بعد العمولات.
+    round_trip_fee_pct: مصاريف الدورة الكاملة (عمولة وسيط + رسوم بورصة وقيد) —
+    قيمة محافظة 0.55% تُخصم من كل صفقة حتى لا تكون نسب النجاح متفائلة زوراً.
     """
     if df is None or df.empty or len(df) < 100:
         return {"error": "بيانات غير كافية للاختبار (يحتاج 100 يوم على الأقل)"}
@@ -46,14 +47,15 @@ def backtest_signals(df: pd.DataFrame, hold_days: int = 5, threshold: int = 4) -
         action = signal["action"]
         price_entry = float(window["Close"].iloc[-1])
         price_exit = float(df_ind["Close"].iloc[i+hold_days])
-        ret = (price_exit - price_entry) / price_entry * 100
+        # العائد صافي بعد عمولات الدورة الكاملة
+        ret = (price_exit - price_entry) / price_entry * 100 - round_trip_fee_pct
 
         # نختبر فقط إشارات الشراء/البيع القوية
         if "شراء" in action:
             trades.append({"action": "شراء", "entry": price_entry, "exit": price_exit, "return": ret, "win": ret > 0})
         elif "بيع" in action:
-            # للبيع: الربح عندما ينخفض السعر
-            ret_short = (price_entry - price_exit) / price_entry * 100
+            # للبيع: الربح عندما ينخفض السعر (إغلاق مركز قائم)
+            ret_short = (price_entry - price_exit) / price_entry * 100 - round_trip_fee_pct
             trades.append({"action": "بيع", "entry": price_entry, "exit": price_exit, "return": ret_short, "win": ret_short > 0})
 
     if not trades:
@@ -84,6 +86,7 @@ def backtest_signals(df: pd.DataFrame, hold_days: int = 5, threshold: int = 4) -
         "best": round(float(best), 2),
         "worst": round(float(worst), 2),
         "hold_days": hold_days,
+        "fee_pct": round_trip_fee_pct,
         "buy_count": len(buy_tr),
         "sell_count": len(sell_tr),
         "buy_win_rate": round(len(buy_tr[buy_tr["win"]])/len(buy_tr)*100,1) if len(buy_tr) else 0,

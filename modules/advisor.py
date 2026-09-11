@@ -60,12 +60,17 @@ def analyze_stock_for_advisor(df: pd.DataFrame) -> dict:
         wyckoff = analyze_wyckoff_phase(df_ind, sig)
         wyckoff_tag = wyckoff.get("tag", "عرضي")
         sym_code = sig.get("symbol", "")
-        if sym_code in INSTITUTIONAL_STOCKS:
-            cat_tag = "مؤسسي قيادي 🏛️"
-        elif sym_code in HIGH_SPECULATIVE_STOCKS:
-            cat_tag = "مضاربي حذر ⚠️"
-        else:
-            cat_tag = "متوسط السيولة"
+        # تصنيف آلي حسب القيمة السوقية الحقيقية (TradingView) — القوائم الثابتة احتياط فقط
+        try:
+            from modules.tv_data import stock_tier
+            cat_tag = stock_tier(sym_code)
+        except Exception:
+            if sym_code in INSTITUTIONAL_STOCKS:
+                cat_tag = "مؤسسي قيادي 🏛️"
+            elif sym_code in HIGH_SPECULATIVE_STOCKS:
+                cat_tag = "مضاربي حذر ⚠️"
+            else:
+                cat_tag = "متوسط السيولة"
 
         # تقييم السيولة والنشاط
         vol_ratio = sig.get("Vol_Ratio", 1.0)
