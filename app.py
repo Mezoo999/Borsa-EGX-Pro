@@ -463,99 +463,135 @@ def trade_ideas_panel():
                 store.remove_idea(USER_STORE, idea["id"])
                 st.rerun()
 
+@st.fragment(run_every=30)
+def portfolio_panel():
+    """محفظتك الفعلية — ربح وخسارة لحظي بأسعار TradingView."""
+    positions = USER_STORE.get("portfolio", {})
+    if not positions:
+        st.info("لا توجد صفقات مسجلة — سجّل أول صفقة من نموذج التسجيل بالأعلى")
+        return
+    snap_p = tvd.snapshot()
+    rows_p = []
+    tot_val = tot_cost = 0.0
+    for sym, p in positions.items():
+        sh = float(p["shares"]); cost = float(p["avg_cost"])
+        tv_r = snap_p.get(sym.replace(".CA", ""))
+        now_p = tv_r["close"] if tv_r else cost
+        val = sh * now_p; basis = sh * cost
+        pl = val - basis
+        pl_pct = (now_p - cost) / cost * 100 if cost else 0
+        day_ch = tv_r["change_pct"] if tv_r else 0
+        tot_val += val; tot_cost += basis
+        rows_p.append({
+            "الرمز": sym.replace(".CA", ""), "الشركة": cname(sym)[:24],
+            "العدد": int(sh), "متوسط الشراء": round(cost, 2),
+            "السعر الآن": round(now_p, 2), "اليوم%": round(day_ch, 2),
+            "القيمة": round(val, 0), "التكلفة": round(basis, 0),
+            "الربح/الخسارة": round(pl, 0), "العائد%": round(pl_pct, 2),
+        })
+    total_pl = tot_val - tot_cost
+    total_pct = total_pl / tot_cost * 100 if tot_cost else 0
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("💼 القيمة السوقية", f"{tot_val:,.0f} ج.م")
+    m2.metric("💵 التكلفة", f"{tot_cost:,.0f} ج.م")
+    m3.metric("📈 الربح/الخسارة", f"{total_pl:+,.0f} ج.م", f"{total_pct:+.2f}%")
+    m4.metric("🗂️ عدد المراكز", len(positions))
+
+    st.dataframe(pd.DataFrame(rows_p), use_container_width=True, hide_index=True, height=min(320, 60 + 35 * len(rows_p)),
+        column_config={
+            "متوسط الشراء": st.column_config.NumberColumn(format="%.2f"),
+            "السعر الآن": st.column_config.NumberColumn(format="%.2f"),
+            "اليوم%": st.column_config.NumberColumn(format="%+.2f%%"),
+            "القيمة": st.column_config.NumberColumn(format="%,.0f"),
+            "التكلفة": st.column_config.NumberColumn(format="%,.0f"),
+            "الربح/الخسارة": st.column_config.NumberColumn(format="%+.0f"),
+            "العائد%": st.column_config.NumberColumn(format="%+.2f%%"),
+        })
+
+    # رسم عائد كل مركز
+    fig_pf = go.Figure(go.Bar(
+        x=[r["العائد%"] for r in rows_p][::-1],
+        y=[r["الرمز"] for r in rows_p][::-1],
+        orientation="h",
+        marker_color=["#00c853" if r["العائد%"] >= 0 else "#ff5c76" for r in rows_p][::-1],
+        text=[f"{r['العائد%']:+.2f}%" for r in rows_p][::-1],
+        textposition="auto",
+    ))
+    fig_pf.update_layout(height=max(220, 50 * len(rows_p)), template="plotly_dark",
+                         paper_bgcolor="#0d1119", margin=dict(l=10, r=30, t=10, b=10),
+                         xaxis_title="العائد %")
+    st.plotly_chart(fig_pf, use_container_width=True)
+    st.caption("🔄 القيم الحية من TradingView — تتحدث كل 30 ثانية")
+
+    # إدارة مراكز المحفظة
+    pick_p = st.selectbox("إدارة مركز", options=list(positions.keys()),
+                          format_func=lambda s: f"{s.replace('.CA','')} — {cname(s)[:26]} — {positions[s]['shares']} سهم", key="pf_manage")
+    pcol_a, pcol_b = st.columns(2)
+    max_sh = int(float(positions[pick_p]["shares"]))
+    sell_n = pcol_a.number_input("عدد الأسهم", 1, max_sh, 1, key="pf_sell_n")
+    if pcol_a.button("💸 بيع من المركز", use_container_width=True, key="pf_sell"):
+        store.sell_position(USER_STORE, pick_p, sell_n)
+        st.rerun()
+    if pcol_b.button("🗑️ حذف المركز بالكامل", use_container_width=True, key="pf_del"):
+        USER_STORE["portfolio"].pop(pick_p, None)
+        store.save_store(USER_STORE)
+        st.rerun()
+
 # شريط التيرمنال: EGX30 + الصاعدون/الهابطون + حالة السوق + الساعة
 terminal_topbar()
 
 # ============================================================
-# السايدبار — بسيط وواضح
+# السايدبار — نظيف ومباشر
 # ============================================================
 with st.sidebar:
-    st.markdown("### 🎛️ التحكم")
+    st.markdown("### 📈 EGX Terminal")
 
-    search_q = st.text_input("🔍 ابحث بالاسم أو الرمز", placeholder="مثلاً: CIB أو فوري")
+    search_q = st.text_input("🔍 بحث", placeholder="اسم أو رمز السهم...", key="sym_search")
+
+    ordered = symbols_by_mcap()
     if search_q:
-        results = smart_search(search_q)
-        st.caption(f"نتائج: {len(results)}")
-        for sym, name in results[:8]:
-            if st.button(f"{sym.replace('.CA','')} — {name[:30]}", key=f"srch_{sym}", use_container_width=True):
-                st.session_state["selected_symbol"] = sym
-    else:
-        results = []
+        ql = search_q.strip().lower()
+        ordered = [s for s in ordered
+                   if ql in s.lower().replace(".ca", "") or ql in (cname(s) or "").lower()]
 
-    st.markdown("---")
-
-    ordered = symbols_by_mcap()  # أكبر الأسهم أولاً حسب القيمة السوقية الحقيقية
     default_sym = st.session_state.get("selected_symbol", "COMI.CA")
-    if default_sym not in ordered: default_sym = "COMI.CA"
+    ordered = [default_sym] + [s for s in ordered if s != default_sym]
 
     symbol = st.selectbox(
-        "📌 السهم الحالي",
+        "السهم الحالي",
         options=ordered,
-        index=ordered.index(default_sym),
-        format_func=lambda s: f"{s.replace('.CA','')} — {cname(s)[:28]}",
+        index=0,
+        format_func=lambda s: f"{s.replace('.CA','')} — {cname(s)[:26]}",
+        label_visibility="collapsed",
     )
     st.session_state["selected_symbol"] = symbol
 
-    period_label = st.selectbox("⏳ فترة التحليل", list(PERIOD_MAP.keys()), index=4)
+    period_label = st.selectbox("فترة التحليل", list(PERIOD_MAP.keys()), index=4)
     period = PERIOD_MAP[period_label]
 
     st.markdown("---")
 
-    sector_filter = st.selectbox("🏭 الأسهم بالقطاع", ["الكل"] + sector_list_dyn(), index=0, key="sector_f")
-    if sector_filter != "الكل":
-        sector_syms = [s for s in ordered if sector_of(s) == sector_filter]
-        st.caption(f"قطاع {sector_filter}: {len(sector_syms)} سهم")
-        for s in sector_syms[:10]:
-            if st.button(f"• {s.replace('.CA','')} — {cname(s)[:24]}", key=f"sec_{s}", use_container_width=True):
-                st.session_state["selected_symbol"] = s
-                st.rerun()
+    with st.expander("⚙️ إعدادات المخاطر"):
+        saved = USER_STORE["settings"]
+        capital = st.number_input("رأس المال (ج.م)", 0.0, 1e9, float(saved.get("capital", 100000.0)), 1000.0, format="%.0f")
+        risk_pct = st.slider("مخاطرة/صفقة %", 0.5, 5.0, float(saved.get("risk_pct", 2.0)), 0.1)
+        max_pct = st.slider("أقصى نسبة للسهم %", 5.0, 50.0, float(saved.get("max_pct", 10.0)), 1.0)
+        if st.button("💾 حفظ", use_container_width=True):
+            USER_STORE["settings"].update({"capital": capital, "risk_pct": risk_pct, "max_pct": max_pct})
+            store.save_store(USER_STORE)
+            st.success("حُفظ ✓")
 
-    st.markdown("---")
-    st.markdown("#### ⭐ متابعتي (محفوظة)")
-    if symbol not in st.session_state.watchlist:
-        if st.button(f"➕ أضف {symbol.replace('.CA','')}", use_container_width=True):
-            st.session_state.watchlist.append(symbol)
-            persist_watch()
-            st.rerun()
-    else:
-        if st.button(f"➖ احذف {symbol.replace('.CA','')}", use_container_width=True):
-            st.session_state.watchlist.remove(symbol)
-            persist_watch()
-            st.rerun()
-
-    for w in st.session_state.watchlist:
-        c1, c2 = st.columns([4,1])
-        if c1.button(f"• {w.replace('.CA','')}", key=f"wl_{w}", use_container_width=True):
-            st.session_state["selected_symbol"] = w
-            st.rerun()
-        if c2.button("×", key=f"del_{w}"):
-            st.session_state.watchlist.remove(w)
-            persist_watch()
-            st.rerun()
-
-    st.markdown("---")
-    saved = USER_STORE["settings"]
-    capital = st.number_input("رأس المال (ج.م)", 0.0, 1e9, float(saved.get("capital", 100000.0)), 1000.0, format="%.0f")
-    risk_pct = st.slider("مخاطرة/صفقة %", 0.5, 5.0, float(saved.get("risk_pct", 2.0)), 0.1)
-    max_pct = st.slider("أقصى نسبة للسهم %", 5.0, 50.0, float(saved.get("max_pct", 10.0)), 1.0)
-    if st.button("💾 حفظ الإعدادات", use_container_width=True):
-        USER_STORE["settings"].update({"capital": capital, "risk_pct": risk_pct, "max_pct": max_pct})
-        store.save_store(USER_STORE)
-        st.success("حُفظ ✓")
-
-    st.markdown("---")
     if st.button("🔄 تحديث البيانات", use_container_width=True):
         tvd.clear_cache()
         st.cache_data.clear()
         st.session_state.last_refresh = datetime.now()
         st.rerun()
-    st.caption("⚠️ استرشادية — ليست توصية مالية")
 
 # ============================================================
 # التبويبات
 # ============================================================
-tab_market, tab_advisor, tab_detail, tab_watch, tab_tools = st.tabs(
-    ["🏠 السوق", "💡 الفرص", "🎯 التداول والقرار", "⭐ المتابعة والصفقات", "🧪 أدوات"]
+tab_market, tab_portfolio, tab_advisor, tab_detail, tab_watch, tab_tools = st.tabs(
+    ["🏠 السوق", "💼 محفظتي", "💡 الفرص", "🎯 التداول والقرار", "⭐ المتابعة والصفقات", "🧪 أدوات"]
 )
 
 # ============================================================
@@ -743,7 +779,35 @@ with tab_market:
         st.info("اضغط **شغّل الفحص** لعرض تحليل السوق الكامل.")
 
 # ============================================================
-# TAB 2: التوصيات الذكية
+# TAB 2: محفظتي — تسجيل ومتابعة صفقاتك الفعلية من ثاندر
+# ============================================================
+with tab_portfolio:
+    st.subheader("💼 محفظتي — متابعة الصفقات الفعلية")
+    st.caption("سجّل صفقاتك كما هي في ثاندر (السهم + عدد الأسهم + متوسط سعر الشراء) وتابع ربحك لحظياً بأسعار TradingView — بياناتك محفوظة على جهازك فقط")
+
+    with st.expander("➕ تسجيل صفقة جديدة", expanded=not USER_STORE.get("portfolio")):
+        fcol1, fcol2, fcol3, fcol4 = st.columns([2, 1.1, 1.2, 1])
+        with fcol1:
+            new_sym = st.selectbox("السهم", options=all_symbols_list(),
+                                   format_func=lambda s: f"{s.replace('.CA','')} — {cname(s)[:24]}", key="pf_new_sym")
+        with fcol2:
+            new_sh = st.number_input("عدد الأسهم", min_value=1, step=1, value=100, key="pf_new_sh")
+        with fcol3:
+            prefill = tvd.one(new_sym)
+            prefill_v = round(prefill["close"], 2) if prefill else 10.0
+            new_cost = st.number_input("متوسط الشراء (ج.م)", min_value=0.01, step=0.01, value=prefill_v, key="pf_new_cost")
+        with fcol4:
+            st.write("")
+            if st.button("💾 تسجيل الصفقة", type="primary", use_container_width=True, key="pf_add"):
+                store.buy_position(USER_STORE, new_sym, int(new_sh), float(new_cost))
+                st.success(f"✓ سُجلت: {int(new_sh)} سهم {new_sym.replace('.CA','')} بمتوسط {new_cost:,.2f}")
+                st.rerun()
+        st.caption(f"💡 السعر المقترح للمتوسط هو سعر {new_sym.replace('.CA','')} الحالي من TradingView — عدّله لمتوسط شرائك الفعلي من ثاندر")
+
+    portfolio_panel()
+
+# ============================================================
+# TAB 3: التوصيات الذكية
 # ============================================================
 with tab_advisor:
     st.subheader("💡 التوصيات الذكية — أفضل فرص السوق الآن")
