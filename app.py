@@ -603,6 +603,27 @@ with tab_market:
     indices_row()
     st.markdown("---")
 
+    # ===== التقرير الصباحي الآلي =====
+    with st.expander("🌅 التقرير الصباحي الآلي — خلاصة اليوم قبل الافتتاح", expanded=False):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        today_rep = os.path.join(base_dir, "reports", f"report_{datetime.now().strftime('%Y-%m-%d')}.md")
+        latest_rep = os.path.join(base_dir, "reports", "latest.md")
+        if os.path.exists(today_rep):
+            st.markdown(open(today_rep, encoding="utf-8").read())
+        else:
+            st.caption("لا يوجد تقرير لليوم بعد — يُنشأ تلقائياً 9:30 صباحاً أيام التداول (الأحد-الخميس)")
+            if st.button("⚙️ أنشئ تقرير اليوم الآن (30-60 ثانية)", use_container_width=True, key="gen_report"):
+                with st.spinner("جمع بيانات السوق وتحليل الفرص وجمع الأخبار..."):
+                    from modules.daily_report import generate_report, save_report
+                    md_rep = generate_report()
+                    save_report(md_rep)
+                st.markdown(md_rep)
+        if os.path.exists(latest_rep):
+            st.download_button("⬇️ تحميل التقرير", open(latest_rep, encoding="utf-8").read().encode("utf-8-sig"),
+                               "egx_daily_report.md", "text/markdown", use_container_width=True, key="dl_report")
+
+    st.markdown("---")
+
     mcol1, mcol2 = st.columns([2.1, 1])
     with mcol1:
         with st.spinner(f"تحميل رسم {symbol}..."):
@@ -861,6 +882,8 @@ with tab_advisor:
             sym = r["الرمز"]
             with col:
                 # الاختبار الرجعي الحقيقي لهذه الفرصة على سنتين
+                ticket = None
+                bt_df = None
                 try:
                     bt_df = cached_single(sym, "2y")
                     bt = backtest_signals(bt_df, hold_days=5, threshold=4)
@@ -868,6 +891,41 @@ with tab_advisor:
                                f"(متوسط {bt['avg_return']:+.1f}%)") if bt.get("total") else "لا توجد صفقات مشابهة تاريخياً"
                 except Exception:
                     bt_line = "اختبار تاريخي غير متاح الآن"
+                # ===== بطاقة الأمر التنفيذي: سعر تفعيل محدد + صلاحية + شرط إلغاء =====
+                try:
+                    tdf = add_indicators(bt_df)
+                    tsig = get_last_signals(tdf)
+                    sup_, res_ = get_support_resistance(tdf)
+                    close_ = float(tsig.get("Close", float(r["السعر"])))
+                    atr_ = float(tsig.get("ATR", close_ * 0.02)) or close_ * 0.02
+                    stop_ = float(r.get("وقف خسارة", 0) or close_ * 0.95)
+                    t1_ = float(r.get("هدف1", 0) or close_ * 1.05)
+                    t2_ = round(close_ + 2 * (t1_ - close_), 2)
+                    setup_ = str(r.get("النموذج", ""))
+                    if "اختراق" in setup_ and res_:
+                        etype_ = "⏱️ أمر شراء عند الكسر (Stop-Buy)"
+                        trig_ = round(res_ + 0.25 * atr_, 2)
+                        zone_ = f"{res_:,.2f} ← {trig_:,.2f}"
+                        cond_ = f"لا تفعّل الأمر إلا بكسر {res_:,.2f} بحجم تداول أعلى من المتوسط"
+                    elif "ارتداد" in setup_ or "تشبع" in setup_:
+                        etype_ = "📥 أمر شراء معلق (Limit-Buy)"
+                        trig_ = round(max(sup_ or close_ - 1.2 * atr_, close_ - 1.5 * atr_), 2)
+                        zone_ = f"{trig_:,.2f} ← {close_:,.2f}"
+                        cond_ = "اشترِ بالتدرج داخل المنطقة — لا تطارد السعر للأعلى"
+                    else:
+                        ema21_ = float(tsig.get("EMA21", close_ * 0.98))
+                        etype_ = "📥 أمر شراء معلق (Limit-Buy)"
+                        trig_ = round(ema21_, 2)
+                        zone_ = f"{min(trig_, close_):,.2f} ← {close_:,.2f}"
+                        cond_ = "الشراء عند عودة السعر لمنطقة المتوسط القصير مع بقاء الاتجاه صاعداً"
+                    sizing_ = position_sizing(capital, risk_pct, trig_, stop_, max_pct)
+                    shares_ = int(sizing_.get("عدد_الأسهم", 0))
+                    rr_ = (t1_ - trig_) / max(trig_ - stop_, 1e-9)
+                    ticket = {"etype": etype_, "trig": trig_, "zone": zone_, "stop": stop_,
+                              "t1": t1_, "t2": t2_, "shares": shares_, "rr": rr_,
+                              "cond": cond_, "value": shares_ * trig_}
+                except Exception:
+                    ticket = None
                 st.markdown(f"""
                 <div class="pick-card" style="border-color:#00c853;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -883,6 +941,26 @@ with tab_advisor:
                 </div>
                 """, unsafe_allow_html=True)
                 st.markdown(f'<div style="background:rgba(41,98,255,0.08); border-radius:8px; padding:0.4rem 0.6rem; font-size:0.78rem;">📊 {bt_line}</div>', unsafe_allow_html=True)
+                if ticket:
+                    st.markdown(f"""
+                    <div style="background:rgba(0,200,83,0.05); border:1px dashed rgba(0,200,83,0.45); border-radius:10px; padding:0.7rem; margin-top:0.4rem;">
+                        <div style="color:#00e676; font-size:0.8rem; font-weight:800; margin-bottom:0.3rem;">📋 {ticket['etype']} — صلاحية 5 جلسات تداول</div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:#e0e0e0;">
+                            <span>سعر التفعيل: <b style="color:white;">{ticket['trig']:,.2f}</b></span>
+                            <span>R:R <b style="color:#00e676;">1:{ticket['rr']:.1f}</b></span>
+                        </div>
+                        <div style="font-size:0.72rem; color:#7d8db1; margin-top:0.15rem;">منطقة الدخول: {ticket['zone']}</div>
+                        <div style="display:flex; justify-content:space-between; font-size:0.75rem; margin-top:0.35rem;">
+                            <span style="color:#ff5c76;">🛡️ وقف {ticket['stop']:,.2f}</span>
+                            <span style="color:#00e676;">🎯 {ticket['t1']:,.2f}</span>
+                            <span style="color:#ce93d8;">🚀 {ticket['t2']:,.2f}</span>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.05); border-radius:6px; padding:0.3rem 0.5rem; margin-top:0.35rem; font-size:0.72rem; color:#90caf9;">
+                            📐 الحجم المقترح: <b>{ticket['shares']:,} سهم</b> ({ticket['value']:,.0f} ج.م) — بحد {max_pct:.0f}% من رأس المال ومخاطرة {risk_pct:.1f}%
+                        </div>
+                        <div style="font-size:0.7rem; color:#ffab00; margin-top:0.3rem;">⛔ شرط الإلغاء: {ticket['cond']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
                 hc1, hc2 = st.columns(2)
                 if hc1.button("🔬 تحليل كامل", key=f"hc_{sym}", use_container_width=True):
                     st.session_state["selected_symbol"] = sym
@@ -1050,7 +1128,11 @@ with tab_detail:
     company_name = get_company_name(symbol)
 
     with st.spinner(f"تحميل {symbol}..."):
-        df = cached_single(symbol, period)
+        # فترات العرض القصير (أسبوع/أسبوعين): نجلب 6 أشهر كاملة لتحليل سليم ونعرض آخر شموع فقط
+        if period in ("5d", "10d"):
+            df = cached_single(symbol, "6mo")
+        else:
+            df = cached_single(symbol, period)
         info = cached_info(symbol)
 
     # السعر اللحظي من TradingView (يُجلب قبل التحليل لنتمكن من تحديث شمعة اليوم)
@@ -1444,30 +1526,33 @@ with tab_detail:
 
         # الرسم
         st.markdown("#### 📈 الرسم الفني مع المؤشرات")
-        xd = short_dates(df_ind.index)
+        # العرض القصير (أسبوع/أسبوعين): التحليل كله على التاريخ الكامل، والرسم يعرض آخر شموع فقط
+        SHORT_VIEWS = {"5d": 7, "10d": 12}
+        df_plot = df_ind.tail(SHORT_VIEWS[period]) if period in SHORT_VIEWS else df_ind
+        xd = short_dates(df_plot.index)
         fig = make_subplots(rows=4, cols=1, shared_xaxes=True, vertical_spacing=0.02,
                             row_heights=[0.50, 0.15, 0.18, 0.17],
                             subplot_titles=("السعر والمتوسطات", "الحجم", "RSI", "MACD"))
-        fig.add_trace(go.Candlestick(x=xd, open=df_ind["Open"], high=df_ind["High"], low=df_ind["Low"], close=df_ind["Close"], name="الشموع"), row=1, col=1)
-        fig.add_trace(go.Scatter(x=xd, y=df_ind["SMA20"], name="SMA20", line=dict(color="orange", width=1)), row=1, col=1)
-        fig.add_trace(go.Scatter(x=xd, y=df_ind["SMA50"], name="SMA50", line=dict(color="#00c853", width=1.2)), row=1, col=1)
-        if "SMA200" in df_ind.columns:
-            fig.add_trace(go.Scatter(x=xd, y=df_ind["SMA200"], name="SMA200", line=dict(color="#ab47bc", width=1.2)), row=1, col=1)
-        if "Supertrend" in df_ind.columns and df_ind["Supertrend"].notna().any():
-            fig.add_trace(go.Scatter(x=xd, y=df_ind["Supertrend"], name="Supertrend", line=dict(width=1.6)), row=1, col=1)
+        fig.add_trace(go.Candlestick(x=xd, open=df_plot["Open"], high=df_plot["High"], low=df_plot["Low"], close=df_plot["Close"], name="الشموع"), row=1, col=1)
+        fig.add_trace(go.Scatter(x=xd, y=df_plot["SMA20"], name="SMA20", line=dict(color="orange", width=1)), row=1, col=1)
+        fig.add_trace(go.Scatter(x=xd, y=df_plot["SMA50"], name="SMA50", line=dict(color="#00c853", width=1.2)), row=1, col=1)
+        if "SMA200" in df_plot.columns:
+            fig.add_trace(go.Scatter(x=xd, y=df_plot["SMA200"], name="SMA200", line=dict(color="#ab47bc", width=1.2)), row=1, col=1)
+        if "Supertrend" in df_plot.columns and df_plot["Supertrend"].notna().any():
+            fig.add_trace(go.Scatter(x=xd, y=df_plot["Supertrend"], name="Supertrend", line=dict(width=1.6)), row=1, col=1)
         if support and resistance:
             fig.add_hline(y=resistance, line_dash="dash", line_color="#ff3d57", annotation_text=f"مقاومة {resistance:.1f}", row=1, col=1)
             fig.add_hline(y=support, line_dash="dash", line_color="#00c853", annotation_text=f"دعم {support:.1f}", row=1, col=1)
-        colors = ["#00c853" if c >= o else "#ff3d57" for c, o in zip(df_ind["Close"], df_ind["Open"])]
-        fig.add_trace(go.Bar(x=xd, y=df_ind["Volume"], name="الحجم", marker_color=colors, opacity=0.6), row=2, col=1)
-        fig.add_trace(go.Scatter(x=xd, y=df_ind["RSI"], name="RSI", line=dict(color="#ffab00", width=1.8)), row=3, col=1)
+        colors = ["#00c853" if c >= o else "#ff3d57" for c, o in zip(df_plot["Close"], df_plot["Open"])]
+        fig.add_trace(go.Bar(x=xd, y=df_plot["Volume"], name="الحجم", marker_color=colors, opacity=0.6), row=2, col=1)
+        fig.add_trace(go.Scatter(x=xd, y=df_plot["RSI"], name="RSI", line=dict(color="#ffab00", width=1.8)), row=3, col=1)
         fig.add_hline(y=70, line_dash="dash", line_color="#ff3d57", row=3, col=1)
         fig.add_hline(y=30, line_dash="dash", line_color="#00c853", row=3, col=1)
         fig.add_hrect(y0=70, y1=100, fillcolor="#ff3d57", opacity=0.08, row=3, col=1)
         fig.add_hrect(y0=0, y1=30, fillcolor="#00c853", opacity=0.08, row=3, col=1)
-        fig.add_trace(go.Bar(x=xd, y=df_ind["MACD_Hist"], name="Hist", marker_color=["#00c853" if v >= 0 else "#ff3d57" for v in df_ind["MACD_Hist"]], opacity=0.7), row=4, col=1)
-        fig.add_trace(go.Scatter(x=xd, y=df_ind["MACD"], name="MACD", line=dict(color="#2962ff", width=1.5)), row=4, col=1)
-        fig.add_trace(go.Scatter(x=xd, y=df_ind["MACD_Signal"], name="Signal", line=dict(color="#ff6d00", width=1.2)), row=4, col=1)
+        fig.add_trace(go.Bar(x=xd, y=df_plot["MACD_Hist"], name="Hist", marker_color=["#00c853" if v >= 0 else "#ff3d57" for v in df_plot["MACD_Hist"]], opacity=0.7), row=4, col=1)
+        fig.add_trace(go.Scatter(x=xd, y=df_plot["MACD"], name="MACD", line=dict(color="#2962ff", width=1.5)), row=4, col=1)
+        fig.add_trace(go.Scatter(x=xd, y=df_plot["MACD_Signal"], name="Signal", line=dict(color="#ff6d00", width=1.2)), row=4, col=1)
         fig.update_layout(height=780, template="plotly_dark", xaxis_rangeslider_visible=False,
                           legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center", font=dict(size=10)),
                           margin=dict(l=10, r=10, t=40, b=10), hovermode="x unified")
