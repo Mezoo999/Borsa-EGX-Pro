@@ -39,6 +39,7 @@ import modules.storage as store
 import modules.tv_data as tvd
 import modules.tv_widgets as tv
 import modules.news as newsfeed
+import modules.macro as macro
 
 # ============================================================
 # إعداد الصفحة
@@ -601,6 +602,38 @@ with tab_market:
     # ===== مؤشرات البورصة الرسمية =====
     st.markdown("#### 🏛️ مؤشرات البورصة المصرية")
     indices_row()
+    st.markdown("---")
+
+    # ===== السياق العالمي وأثره على قراراتك =====
+    with st.expander("🌍 السياق العالمي وأثره على قراراتك — الدولار، برنت، الفائدة الأمريكية", expanded=False):
+        macro_data = macro.fetch_macro()
+        if not macro_data:
+            st.caption("جاري تحميل البيانات العالمية...")
+        else:
+            reg_ = macro.regime(macro_data)
+            st.markdown(f"""
+            <div style="background:#10141d; border:1px solid {reg_['color']}; border-radius:12px; padding:0.7rem 1rem; margin-bottom:0.7rem;">
+                <b style="color:{reg_['color']}; font-size:1rem;">{reg_['label']}</b>
+                <div style="color:#7d8db1; font-size:0.78rem; margin-top:0.2rem;">{reg_['desc']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            mcols = st.columns(len(macro_data))
+            for mcol, (tk_, m_) in zip(mcols, macro_data.items()):
+                cc_ = "#00e676" if m_["day_pct"] > 0 else ("#ff5c76" if m_["day_pct"] < 0 else "#90a4ae")
+                mcol.markdown(f'<div class="metric-card" style="padding:0.5rem;"><div style="color:#7d8db1; font-size:0.62rem;">{m_["label"]}</div><div style="color:white; font-weight:700; font-size:0.85rem;">{m_["value"]:,.2f}</div><div style="color:{cc_}; font-size:0.66rem;">{m_["day_pct"]:+.2f}% اليوم • {m_["wk_pct"]:+.2f}% أسبوع</div></div>', unsafe_allow_html=True)
+            sigs_ = macro.macro_signals(macro_data)
+            if sigs_:
+                st.markdown("##### 🔍 قراءة السياق للسوق المصري")
+                for tone_, text_ in sigs_:
+                    icon_ = "🟢" if tone_ == "pos" else ("🟠" if tone_ == "neg_mixed" else "🔴")
+                    st.markdown(f"- {icon_} {text_}")
+            pos_ = USER_STORE.get("portfolio", {})
+            if pos_:
+                st.markdown("##### 💼 أثر هذا السياق على محفظتك")
+                for sym_ in pos_:
+                    st.markdown(f"- **{sym_.replace('.CA','')}** — {macro.holding_impact(sector_of(sym_))}")
+            st.caption("بيانات عالمية حقيقية من Yahoo Finance بلا تأخير عملي — تُحدَّث كل 10 دقائق")
+
     st.markdown("---")
 
     # ===== التقرير الصباحي الآلي =====

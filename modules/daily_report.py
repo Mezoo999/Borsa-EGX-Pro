@@ -26,6 +26,20 @@ def _section_indices() -> list:
     return lines
 
 
+def _section_macro() -> list:
+    from .macro import fetch_macro, macro_signals, regime
+    data = fetch_macro()
+    if not data:
+        return ["## 🌍 السياق العالمي", "- بيانات غير متاحة الآن"]
+    reg = regime(data)
+    lines = ["## 🌍 السياق العالمي وأثره",
+             f"**{reg['label']}** — {reg['desc']}"]
+    for tone, text in macro_signals(data):
+        icon = "🟢" if tone == "pos" else ("🟠" if tone == "neg_mixed" else "🔴")
+        lines.append(f"- {icon} {text}")
+    return lines
+
+
 def _section_movers() -> list:
     from .tv_data import snapshot
     snap = snapshot()
@@ -134,7 +148,7 @@ def _section_news() -> list:
 
 def generate_report() -> str:
     parts = [f"# 🌅 التقرير الصباحي — {datetime.now().strftime('%Y-%m-%d %H:%M')} بتوقيت القاهرة\n"]
-    for fn in (_section_indices, _section_movers, _section_sectors,
+    for fn in (_section_indices, _section_macro, _section_movers, _section_sectors,
                _section_opportunities, _section_news):
         try:
             parts.append("\n".join(fn()))
