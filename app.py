@@ -40,6 +40,7 @@ import modules.tv_data as tvd
 import modules.tv_widgets as tv
 import modules.news as newsfeed
 import modules.macro as macro
+import modules.charts as charts
 
 # ============================================================
 # إعداد الصفحة
@@ -144,6 +145,15 @@ div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: white; fon
 .tb-cell { display:flex; align-items:center; gap:0.45rem; padding:0 0.8rem; border-left:1px solid #1f2d45; font-size:0.82rem; }
 .tb-cell:last-child { border-left:none; }
 .tb-label { color:#7d8db1; font-size:0.68rem; font-weight:700; }
+
+/* ===== وميض الأسعار عند التغير — شريان الحياة ===== */
+@keyframes flashUp { 0% { background: rgba(0,200,83,0.4); } 100% { background: transparent; } }
+@keyframes flashDown { 0% { background: rgba(255,61,87,0.4); } 100% { background: transparent; } }
+.flash-up { animation: flashUp 1.4s ease-out; border-radius:8px; }
+.flash-down { animation: flashDown 1.4s ease-out; border-radius:8px; }
+
+/* ===== شريط التيكر — يتنفس ===== */
+.tv-tape-strip { border:1px solid #1f2d45; border-radius:10px; overflow:hidden; margin-bottom:0.7rem; background:#0d1119; }
 
 /* ===== تبويبات ===== */
 .stTabs [data-baseweb="tab-list"] { gap: 0.4rem; background: #0d1119; border-radius: 12px; padding: 0.3rem; }
@@ -262,6 +272,18 @@ def tv_overlay(df, sym_col="الرمز", price_col="السعر", chg_col="الت
         df[chg_col] = [c if c is not None else o for c, o in zip(chgs, df[chg_col])]
     return df
 
+def compute_sparks(bulk):
+    """شرائط اتجاه 30 جلسة لكل سهم من بيانات الشموع — للعرض داخل الجداول."""
+    sparks = {}
+    for sym_, sdf_ in (bulk or {}).items():
+        try:
+            if sdf_ is not None and not sdf_.empty and len(sdf_) >= 5:
+                sparks[sym_] = [round(float(v), 2) for v in sdf_["Close"].tail(30).tolist()]
+        except Exception:
+            pass
+    return sparks
+
+
 def indices_row():
     """بطاقات مؤشرات البورصة الرسمية (EGX30 / EGX70) من TradingView."""
     idx = tvd.indices()
@@ -318,29 +340,10 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ===== شريط الأسعار اللحظي — نفس مصدر TradingView =====
-@st.fragment(run_every=30)
-def live_prices_strip():
-    """أكبر 10 أسهم بأسعار TradingView الحقيقية — يتحدث كل 30 ثانية."""
-    try:
-        snap = tvd.snapshot()
-        if not snap:
-            st.caption("جاري تحميل الأسعار اللحظية من TradingView...")
-            return
-        syms = [s.replace(".CA", "") for s in symbols_by_mcap(10)]
-        cols = st.columns(len(syms))
-        for col, short in zip(cols, syms):
-            row = snap.get(short)
-            if not row:
-                continue
-            ch = row["change_pct"]
-            cc = "#00e676" if ch > 0 else ("#ff5c76" if ch < 0 else "#90a4ae")
-            col.markdown(f'<div class="metric-card" style="padding:0.45rem;"><div style="color:#7d8db1; font-size:0.62rem;">{short}</div><div style="color:white; font-weight:700; font-size:0.85rem;">{row["close"]:,.2f}</div><div style="color:{cc}; font-size:0.68rem;">{ch:+.2f}%</div></div>', unsafe_allow_html=True)
-        st.caption("🔁 يتحدث كل 30 ثانية — أسعار TradingView (نفس الأرقام التي تراها على الموقع الرسمي)")
-    except Exception:
-        st.caption("جاري تحميل الأسعار...")
-
-live_prices_strip()
+# ===== شريط التيكر المتحرك — نبض السوق المستمر (أسعار TradingView تجري فعلياً) =====
+st.markdown('<div class="tv-tape-strip">', unsafe_allow_html=True)
+tv.render_tv(tv.tradingview_ticker_tape([s.replace(".CA", "") for s in symbols_by_mcap(12)]), height=66)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # ============================================================
 # شريط التيرمنال + مراقبة الصفقات (تحديث لحظي كل 30 ثانية)
@@ -355,7 +358,13 @@ def terminal_topbar():
         egx30 = idx.get("EGX30")
         if egx30:
             cc = "#00e676" if egx30["change_pct"] > 0 else ("#ff5c76" if egx30["change_pct"] < 0 else "#90a4ae")
-            cells.append(f'<div class="tb-cell"><span class="tb-label">EGX30</span><b style="color:white;">{egx30["value"]:,.2f}</b><span style="color:{cc}; font-weight:800;">{egx30["change_pct"]:+.2f}%</span></div>')
+            # وميض القيمة عند أي تغير — شريان الحياة
+            prev_v = st.session_state.get("prev_egx30_val")
+            flash_cls = ""
+            if prev_v is not None and abs(egx30["value"] - prev_v) > 0.005:
+                flash_cls = " flash-up" if egx30["value"] > prev_v else " flash-down"
+            st.session_state["prev_egx30_val"] = egx30["value"]
+            cells.append(f'<div class="tb-cell{flash_cls}"><span class="tb-label">EGX30</span><b style="color:white;">{egx30["value"]:,.2f}</b><span style="color:{cc}; font-weight:800;">{egx30["change_pct"]:+.2f}%</span></div>')
         ups = sum(1 for r in snap.values() if r["change_pct"] > 0)
         downs = sum(1 for r in snap.values() if r["change_pct"] < 0)
         flats = len(snap) - ups - downs
@@ -380,6 +389,7 @@ def watch_panel():
     with st.spinner("تحديث المتابعة..."):
         snap_w = tvd.snapshot()
         w_bulk = cached_bulk(tuple(st.session_state.watchlist), "3mo") or {}
+        sparks_w = compute_sparks(w_bulk)
         rows_w = []
         for w in st.session_state.watchlist:
             row_w = {"الرمز": w.replace(".CA", ""), "الشركة": cname(w)[:30]}
@@ -387,6 +397,7 @@ def watch_panel():
             if tv_r:
                 row_w["السعر الحالي"] = round(tv_r["close"], 2)
                 row_w["التغير%"] = round(tv_r["change_pct"], 2)
+            row_w["الاتجاه (30 جلسة)"] = sparks_w.get(w)
             wdf = w_bulk.get(w)
             row_w["إشارة اليوم"] = "—"
             if wdf is not None and not wdf.empty and len(wdf) > 30:
@@ -401,6 +412,7 @@ def watch_panel():
         column_config={
             "السعر الحالي": st.column_config.NumberColumn(format="%.2f"),
             "التغير%": st.column_config.NumberColumn(format="%.2f%%"),
+            "الاتجاه (30 جلسة)": st.column_config.LineChartColumn("الاتجاه", y_min=0.9, y_max=1.1),
         })
     st.caption("🔄 يتحدث كل 30 ثانية — الأسعار من TradingView • الإشارة من آخر جلسة")
     pick_w = st.selectbox("إدارة سهم", options=st.session_state.watchlist,
@@ -604,36 +616,36 @@ with tab_market:
     indices_row()
     st.markdown("---")
 
-    # ===== السياق العالمي وأثره على قراراتك =====
-    with st.expander("🌍 السياق العالمي وأثره على قراراتك — الدولار، برنت، الفائدة الأمريكية", expanded=False):
-        macro_data = macro.fetch_macro()
-        if not macro_data:
-            st.caption("جاري تحميل البيانات العالمية...")
-        else:
-            reg_ = macro.regime(macro_data)
+    # ===== السياق العالمي — ظاهر مباشرة في الشبكة (بلا طيّات) =====
+    macro_data = macro.fetch_macro()
+    if macro_data:
+        reg_ = macro.regime(macro_data)
+        first_cols = st.columns([2.3] + [1] * len(macro_data))
+        with first_cols[0]:
             st.markdown(f"""
-            <div style="background:#10141d; border:1px solid {reg_['color']}; border-radius:12px; padding:0.7rem 1rem; margin-bottom:0.7rem;">
-                <b style="color:{reg_['color']}; font-size:1rem;">{reg_['label']}</b>
-                <div style="color:#7d8db1; font-size:0.78rem; margin-top:0.2rem;">{reg_['desc']}</div>
+            <div style="background:#10141d; border:1px solid {reg_['color']}; border-radius:12px; padding:0.5rem 0.8rem; height:100%;">
+                <b style="color:{reg_['color']}; font-size:0.85rem;">{reg_['label']}</b>
+                <div style="color:#7d8db1; font-size:0.64rem; margin-top:0.15rem;">السياق العالمي الآن</div>
             </div>
             """, unsafe_allow_html=True)
-            mcols = st.columns(len(macro_data))
-            for mcol, (tk_, m_) in zip(mcols, macro_data.items()):
-                cc_ = "#00e676" if m_["day_pct"] > 0 else ("#ff5c76" if m_["day_pct"] < 0 else "#90a4ae")
-                mcol.markdown(f'<div class="metric-card" style="padding:0.5rem;"><div style="color:#7d8db1; font-size:0.62rem;">{m_["label"]}</div><div style="color:white; font-weight:700; font-size:0.85rem;">{m_["value"]:,.2f}</div><div style="color:{cc_}; font-size:0.66rem;">{m_["day_pct"]:+.2f}% اليوم • {m_["wk_pct"]:+.2f}% أسبوع</div></div>', unsafe_allow_html=True)
-            sigs_ = macro.macro_signals(macro_data)
-            if sigs_:
-                st.markdown("##### 🔍 قراءة السياق للسوق المصري")
-                for tone_, text_ in sigs_:
-                    icon_ = "🟢" if tone_ == "pos" else ("🟠" if tone_ == "neg_mixed" else "🔴")
-                    st.markdown(f"- {icon_} {text_}")
+        for mcol, (tk_, m_) in zip(first_cols[1:], macro_data.items()):
+            cc_ = "#00e676" if m_["day_pct"] > 0 else ("#ff5c76" if m_["day_pct"] < 0 else "#90a4ae")
+            mcol.markdown(f'<div class="metric-card" style="padding:0.4rem;"><div style="color:#7d8db1; font-size:0.56rem;">{m_["label"]}</div><div style="color:white; font-weight:700; font-size:0.78rem;">{m_["value"]:,.2f}</div><div style="color:{cc_}; font-size:0.6rem;">{m_["day_pct"]:+.2f}%</div></div>', unsafe_allow_html=True)
+        sigs_ = macro.macro_signals(macro_data)
+        if sigs_:
+            tone0, text0 = sigs_[0]
+            icon0 = "🟢" if tone0 == "pos" else ("🟠" if tone0 == "neg_mixed" else "🔴")
+            st.markdown(f'<div style="background:rgba(41,98,255,0.05); border:1px solid #1f2d45; border-radius:8px; padding:0.35rem 0.7rem; font-size:0.76rem; color:#cfd8dc; margin-top:0.35rem;">{icon0} {text0}</div>', unsafe_allow_html=True)
+        with st.expander("🔍 القراءة العالمية الكاملة + أثرها على محفظتك"):
+            for tone_, text_ in sigs_:
+                icon_ = "🟢" if tone_ == "pos" else ("🟠" if tone_ == "neg_mixed" else "🔴")
+                st.markdown(f"- {icon_} {text_}")
             pos_ = USER_STORE.get("portfolio", {})
             if pos_:
-                st.markdown("##### 💼 أثر هذا السياق على محفظتك")
+                st.markdown("**💼 أثر هذا السياق على محفظتك:**")
                 for sym_ in pos_:
                     st.markdown(f"- **{sym_.replace('.CA','')}** — {macro.holding_impact(sector_of(sym_))}")
-            st.caption("بيانات عالمية حقيقية من Yahoo Finance بلا تأخير عملي — تُحدَّث كل 10 دقائق")
-
+            st.caption("بيانات عالمية حقيقية من Yahoo Finance — تُحدَّث كل 10 دقائق")
     st.markdown("---")
 
     # ===== التقرير الصباحي الآلي =====
@@ -671,18 +683,9 @@ with tab_market:
                 if tv_live_m["close"] < float(df_m["Low"].iloc[-1]):
                     df_m.iloc[-1, df_m.columns.get_loc("Low")] = tv_live_m["close"]
             dfm = add_indicators(df_m)
-            xm = short_dates(dfm.index)
-            figm = go.Figure()
-            figm.add_trace(go.Candlestick(x=xm, open=dfm["Open"], high=dfm["High"], low=dfm["Low"], close=dfm["Close"], name="الشموع",
-                                          increasing_line_color="#00e676", decreasing_line_color="#ff5c76"))
-            figm.add_trace(go.Scatter(x=xm, y=dfm["SMA20"], name="SMA20", line=dict(color="#ffab00", width=1)))
-            figm.add_trace(go.Scatter(x=xm, y=dfm["SMA50"], name="SMA50", line=dict(color="#29b6f6", width=1)))
-            figm.update_layout(height=560, template="plotly_dark", xaxis_rangeslider_visible=False,
-                               margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified",
-                               paper_bgcolor="#0d1119", legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center"))
-            figm.update_xaxes(type="category")
-            st.plotly_chart(figm, use_container_width=True)
-            st.caption(f"📊 {symbol.replace('.CA','')} — آخر 6 أشهر (شموع + متوسطات) — مرر بالماوس لرؤية الأسعار")
+            # محرك TradingView المفتوح — كروس هير لحظي وإحساس تيرمنال كامل
+            charts.lightweight_candles(dfm, height=560)
+            st.caption(f"📊 {symbol.replace('.CA','')} — آخر 6 أشهر (شموع + حجم + متوسطات 20/50) — حرّك المؤشر لقراءة أي شمعة بدقة")
         else:
             st.error("تعذر تحميل بيانات هذا السهم")
 
@@ -729,17 +732,8 @@ with tab_market:
         sec_rows = sorted(((s_, sum(v_) / len(v_), len(v_)) for s_, v_ in sec_acc.items() if len(v_) >= 3),
                           key=lambda x_: x_[1], reverse=True)
         if sec_rows:
-            fig_sec = go.Figure(go.Bar(
-                x=[r_[1] for r_ in sec_rows][::-1],
-                y=[f"{r_[0]} ({r_[2]} سهم)" for r_ in sec_rows][::-1],
-                orientation="h",
-                marker_color=["#00c853" if v_ > 0 else ("#ff5c76" if v_ < 0 else "#546e7a") for v_ in [r_[1] for r_ in sec_rows][::-1]],
-                text=[f"{v_:+.2f}%" for v_ in [r_[1] for r_ in sec_rows][::-1]],
-                textposition="auto",
-            ))
-            fig_sec.update_layout(height=max(300, 36 * len(sec_rows)), template="plotly_dark",
-                                  paper_bgcolor="#0d1119", margin=dict(l=10, r=30, t=10, b=10))
-            st.plotly_chart(fig_sec, use_container_width=True)
+            # ECharts — أعمدة تنطلق بحركة مرنة عند كل تحديث
+            charts.echarts_sectors(sec_rows, height=max(300, 36 * len(sec_rows)))
             st.caption("متوسط تغير أسهم كل قطاع اليوم — محسوب من أسعار TradingView لكل أسهم البورصة")
         else:
             st.caption("جاري حساب أداء القطاعات...")
@@ -812,12 +806,19 @@ with tab_market:
             df_scr = df_scr[df_scr["الإشارة"] == "انتظار / محايد"]
 
         display = df_scr[["الرمز","الشركة","السعر","التغير%","الحجم","RSI","SMA_trend","الإشارة","الثقة%"]].copy()
+        # شرائط الاتجاه المصغرة — تريك حركة آخر 30 جلسة لعينك
+        try:
+            sparks_scr = compute_sparks(cached_bulk(tuple(display["الرمز"].tolist()), "3mo"))
+            display.insert(3, "الاتجاه (30 جلسة)", [sparks_scr.get(s_, None) for s_ in display["الرمز"]])
+        except Exception:
+            pass
         st.dataframe(display, use_container_width=True, hide_index=True, height=380,
             column_config={
                 "التغير%": st.column_config.NumberColumn(format="%.2f%%"),
                 "السعر": st.column_config.NumberColumn(format="%.2f"),
                 "RSI": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f"),
                 "الثقة%": st.column_config.ProgressColumn(min_value=0, max_value=100),
+                "الاتجاه (30 جلسة)": st.column_config.LineChartColumn("الاتجاه", y_min=0.9, y_max=1.1),
             })
 
         pick = st.selectbox("افتح تحليل سهم من النتائج", options=df_scr["الرمز"].tolist(),
