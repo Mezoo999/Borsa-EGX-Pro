@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EGX Pro — البورصة المصرية</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="logo">📈 EGX <span>Pro</span></div>
+  <div class="search-wrap">
+    <input id="searchInput" placeholder="ابحث عن سهم بالاسم أو الرمز..." autocomplete="off">
+    <div id="searchDrop"></div>
+  </div>
+  <div class="header-right">
+    <span class="status-chip" id="statusChip">...</span>
+    <span id="clock"></span>
+  </div>
+</header>
+
+<div class="tape"><div class="tape-inner" id="tape"></div></div>
+
+<div class="wrap">
+  <div class="idx-row" id="idxRow"></div>
+
+  <div class="idx-row" id="macroRow"></div>
+
+  <div class="grid-main">
+    <div class="card">
+      <h3>🔥 أكثر الأسهم تحركاً اليوم — اضغط أي سهم لتحليله</h3>
+      <div class="grid-2" style="margin-top:0;">
+        <div>
+          <div class="up" style="font-size:0.75rem;font-weight:700;margin-bottom:0.3rem;">▲ الأكثر صعوداً</div>
+          <table id="upTable"><thead><tr><th>السهم</th><th>الشركة</th><th>السعر</th><th>%</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div>
+          <div class="down" style="font-size:0.75rem;font-weight:700;margin-bottom:0.3rem;">▼ الأكثر هبوطاً</div>
+          <table id="downTable"><thead><tr><th>السهم</th><th>الشركة</th><th>السعر</th><th>%</th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+      <div class="caption" id="breadthLine"></div>
+    </div>
+    <div class="card">
+      <h3>🏙️ أداء القطاعات اليوم</h3>
+      <div id="sectors" style="height:340px;"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:0.9rem;">
+    <h3>📰 أخبار قائمتك ومحفظتك — حقيقية ومحدثة</h3>
+    <div id="news" class="grid-2" style="margin-top:0;"></div>
+  </div>
+  <div class="caption">الأسعار من TradingView (مؤجلة ~15 دقيقة وفق قواعد البورصة المصرية) • السياق العالمي من Yahoo Finance • الاحتمالات من محرك مدرب على تاريخ السوق — استرشادي وليس نصيحة استثمارية</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

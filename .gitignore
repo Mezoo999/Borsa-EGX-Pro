@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 user_store.json
 streamlit.log
+webapp.log
