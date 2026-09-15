@@ -66,9 +66,35 @@ async function loadCandles() {
 }
 
 let prevLive = null;
+
+// سعر لحظي خفيف — يتحدث بسرعة دون إعادة تحميل التحليل الكامل
+async function pollQuote() {
+  try {
+    const q = await fetch(`/api/quote/${encodeURIComponent(API_SYM)}`).then(r => r.json());
+    if (!q || q.error) return;
+    const lp = $("livePrice");
+    if (!lp) return;
+    lp.textContent = fmt(q.price);
+    if (prevLive !== null && Math.abs(q.price - prevLive) > 0.005) {
+      lp.classList.remove("flash-up", "flash-down"); void lp.offsetWidth;
+      lp.classList.add(q.price > prevLive ? "flash-up" : "flash-down");
+    }
+    prevLive = q.price;
+    const pc = document.querySelector(".price-chg");
+    if (pc) { pc.className = "price-chg " + cls(q.chg); pc.textContent = `${q.chg >= 0 ? "▲" : "▼"} ${Math.abs(q.chg).toFixed(2)}%`; }
+  } catch (e) { /* تجاهل */ }
+}
+
 async function loadStock() {
-  const d = await fetch(`/api/stock/${encodeURIComponent(API_SYM)}`).then(r => r.json());
-  if (d.error) { $("stockHeader").innerHTML = `<div class="loading">${d.error}</div>`; return; }
+  const res = await fetch(`/api/stock/${encodeURIComponent(API_SYM)}`);
+  const d = await res.json();
+  if (!res.ok || d.error) {
+    const msg = d.error || d.detail || "تعذر تحميل بيانات هذا السهم";
+    $("stockHeader").innerHTML = `<div class="loading">${msg}</div>`;
+    ["mlCard", "ticketCard"].forEach(id => { const el = $(id); if (el) el.innerHTML = `<h3>—</h3><div class="loading">لا توجد بيانات متاحة لهذا الرمز</div>`; });
+    $("stockNews").innerHTML = `<div class="loading">—</div>`;
+    return;
+  }
 
   $("stockHeader").innerHTML = `
     <h1>${d.name}</h1><span class="sym-code">${d.symbol}</span>
@@ -134,5 +160,6 @@ async function loadStock() {
 
 loadCandles();
 loadStock();
-setInterval(loadStock, 30000);   // السعر والاحتمال كل 30 ثانية
+setInterval(pollQuote, 15000);    // السعر اللحظي كل 15 ثانية
+setInterval(loadStock, 60000);    // التحليل والاحتمال كل دقيقة
 setInterval(loadCandles, 120000); // الشموع كل دقيقتين

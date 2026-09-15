@@ -13,8 +13,11 @@ from modules.signals import generate_signal, calculate_technical_score, calculat
 from modules.expert_advisor import analyze_wyckoff_phase, INSTITUTIONAL_STOCKS, HIGH_SPECULATIVE_STOCKS
 
 
-def analyze_stock_for_advisor(df: pd.DataFrame) -> dict:
-    """تحليل سهم واحد وترجيع ملف كامل للتوصية (يُستخدم في الفحص الجماعي)."""
+def analyze_stock_for_advisor(df: pd.DataFrame, symbol: str = "") -> dict:
+    """تحليل سهم واحد وترجيع ملف كامل للتوصية (يُستخدم في الفحص الجماعي).
+
+    symbol: رمز السهم (مثل "COMI.CA") — ضروري لتصنيف القيمة السوقية الصحيح.
+    """
     if df is None or df.empty or len(df) < 40:
         return {}
 
@@ -59,7 +62,7 @@ def analyze_stock_for_advisor(df: pd.DataFrame) -> dict:
         # تحليل وايكوف وطبيعة السهم
         wyckoff = analyze_wyckoff_phase(df_ind, sig)
         wyckoff_tag = wyckoff.get("tag", "عرضي")
-        sym_code = sig.get("symbol", "")
+        sym_code = symbol or sig.get("symbol", "")
         # تصنيف آلي حسب القيمة السوقية الحقيقية (TradingView) — القوائم الثابتة احتياط فقط
         try:
             from modules.tv_data import stock_tier
@@ -116,7 +119,7 @@ def rank_opportunities(bulk: dict, filter_mode: str = "شراء قوي") -> pd.D
     """
     rows = []
     for sym, df in bulk.items():
-        r = analyze_stock_for_advisor(df)
+        r = analyze_stock_for_advisor(df, sym)
         if not r:
             continue
         r["الرمز"] = sym

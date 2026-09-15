@@ -90,10 +90,10 @@ def _section_opportunities() -> list:
     rows = []
     for sym, df in (bulk or {}).items():
         try:
-            info = analyze_stock_for_advisor(df)
+            info = analyze_stock_for_advisor(df, sym)
             if not info:
                 continue
-            info["الرمز"] = sym.replace(".CA", "")  # الوحدة لا تملك الرمز — نمرره يدوياً
+            info["الرمز"] = sym.replace(".CA", "")
             is_buy = "شراء" in str(info.get("إشارة", ""))
             high_score = info.get("درجة فنية", 0) >= 65
             high_conf = info.get("ثقة%", 0) >= 70

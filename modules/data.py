@@ -1,4 +1,5 @@
 """وحدة تحميل البيانات من Yahoo Finance لأسهم البورصة المصرية (EGX) - النسخة الاحترافية."""
+import logging
 import warnings
 from datetime import datetime, timedelta
 
@@ -6,6 +7,13 @@ import yfinance as yf
 import pandas as pd
 
 warnings.filterwarnings("ignore")
+# إسكات رسائل yfinance المتكررة للرموز التي لا يوفر لها Yahoo تاريخاً (مثل QNBE.CA)
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+
+# رموز متداولة فعلاً في البورصة المصرية (وتظهر في TradingView) لكن Yahoo لا يوفر
+# لها بيانات تاريخية — نستبعدها من طلبات التاريخ لتجنّب الضجيج في السجلات.
+# السعر اللحظي لهذه الرموز يبقى متاحاً من TradingView.
+YAHOO_NO_HISTORY = {"QNBE.CA"}
 
 # ============================================================
 # قاعدة بيانات شاملة لجميع أسهم EGX (229 سهم - محدثة من EGX)
@@ -287,7 +295,8 @@ AR_NAMES = {
     "KZPC.CA": "كفر الزيات",
 }
 
-# مكونات EGX30 (أكبر 30 سهم من حيث القيمة السوقية)
+# ملاحظة: لا نعتمد قائمة EGX30 ثابتة — تُبنى ديناميكياً من TradingView حسب القيمة
+# السوقية الحقيقية (انظر app.symbols_by_mcap / tvd.stock_tier). القائمة أدناه احتياطية فقط.
 EGX30_TICKERS = list(EGX_STOCKS.keys())[:30]
 
 # ============================================================
@@ -328,7 +337,7 @@ SECTORS = {
     "MFPC.CA": "أسمدة وكيمياويات", "ABUK.CA": "أسمدة وكيمياويات",
     "SKPC.CA": "أسمدة وكيمياويات", "EFIC.CA": "أسمدة وكيمياويات",
     "EGCH.CA": "أسمدة وكيمياويات", "FERC.CA": "أسمدة وكيمياويات",
-    "KZPC.A": "أسمدة وكيمياويات", "RMDA.CA": "أسمدة وكيمياويات",
+    "KZPC.CA": "أسمدة وكيمياويات", "RMDA.CA": "أسمدة وكيمياويات",
     "SIIN.CA": "أسمدة وكيمياويات",
     # أسمنت وبناء
     "ARCC.CA": "أسمنت وبناء", "SCEM.CA": "أسمنت وبناء", "MBSC.CA": "أسمنت وبناء",
@@ -413,6 +422,8 @@ INTERVAL_PERIOD_MAP = {
 
 def get_stock_data(symbol: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
     """تحميل بيانات الأسعار التاريخية لسهم واحد (يدعم المضاربة اللحظية)."""
+    if symbol in YAHOO_NO_HISTORY:
+        return pd.DataFrame()
     # للمضاربة: غيّر الفترة تلقائياً حسب الفاصل
     eff_period = INTERVAL_PERIOD_MAP.get(interval, period) if interval != "1d" else period
     if eff_period is None:
@@ -453,6 +464,9 @@ def get_bulk_data(symbols: list, period: str = "3mo", interval: str = "1d", auto
     ترجع dict {symbol: DataFrame}
     يدعم الفواصل اللحظية للمضاربة (مع fallback لليومي لـ EGX).
     """
+    if not symbols:
+        return {}
+    symbols = [s for s in symbols if s not in YAHOO_NO_HISTORY]
     if not symbols:
         return {}
     eff_period = INTERVAL_PERIOD_MAP.get(interval, period) if interval != "1d" else period

@@ -37,6 +37,9 @@ def backtest_signals(df: pd.DataFrame, hold_days: int = 5, threshold: int = 4,
             sig["ATR"] = float(window["ATR"].iloc[-1])
             sig["Volume"] = float(window["Volume"].iloc[-1])
             sig["Vol_MA20"] = float(window["Vol_MA20"].iloc[-1])
+            sig["Vol_Ratio"] = float(window["Vol_Ratio"].iloc[-1]) if "Vol_Ratio" in window.columns else 1.0
+            sig["Turnover_M"] = (float(window["Turnover"].iloc[-1]) / 1e6) if "Turnover" in window.columns else 0.0
+            sig["ST_dir"] = float(window["ST_dir"].iloc[-1]) if "ST_dir" in window.columns else 0.0
             if np.isnan(sig["RSI"]) or np.isnan(sig["SMA20"]):
                 continue
         except:
@@ -45,15 +48,16 @@ def backtest_signals(df: pd.DataFrame, hold_days: int = 5, threshold: int = 4,
         # إشارة ذلك اليوم
         signal = generate_signal(sig, window)
         action = signal["action"]
+        strength = signal.get("score", 0)  # قوة الإشارة (score) لتفعيل حد threshold
         price_entry = float(window["Close"].iloc[-1])
         price_exit = float(df_ind["Close"].iloc[i+hold_days])
         # العائد صافي بعد عمولات الدورة الكاملة
         ret = (price_exit - price_entry) / price_entry * 100 - round_trip_fee_pct
 
-        # نختبر فقط إشارات الشراء/البيع القوية
-        if "شراء" in action:
+        # نختبر فقط الإشارات التي تتجاوز حد القوة المطلوب (threshold)
+        if "شراء" in action and strength >= threshold:
             trades.append({"action": "شراء", "entry": price_entry, "exit": price_exit, "return": ret, "win": ret > 0})
-        elif "بيع" in action:
+        elif "بيع" in action and strength <= -threshold:
             # للبيع: الربح عندما ينخفض السعر (إغلاق مركز قائم)
             ret_short = (price_entry - price_exit) / price_entry * 100 - round_trip_fee_pct
             trades.append({"action": "بيع", "entry": price_entry, "exit": price_exit, "return": ret_short, "win": ret_short > 0})

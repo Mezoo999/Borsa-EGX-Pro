@@ -168,7 +168,7 @@ def get_support_resistance(df: pd.DataFrame, lookback: int = 200) -> tuple:
 def calculate_technical_score(signals: dict, df: pd.DataFrame) -> dict:
     """
     درجة التحليل الفني الموحدة (0-100):
-    تجمع كل المؤشرات في درجة واحدة fácil de entender.
+    تجمع كل المؤشرات في درجة واحدة سهلة الفهم.
     0-20 = بيع قوي | 20-40 = بيع | 40-60 = محايد | 60-80 = شراء | 80-100 = شراء قوي
     """
     score = 50  # نقطة البداية محايد

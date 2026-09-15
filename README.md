@@ -18,11 +18,35 @@
 
 ## 🚀 التشغيل
 
+**المتطلبات:** Python 3.12+
+
 ```bash
 pip install -r requirements.txt
+```
+
+### الواجهة الكاملة (Streamlit)
+```bash
 python -m streamlit run app.py
 ```
 أو مباشرة بـ `run.bat` — ثم افتح `http://localhost:8501`
+
+### بوابة الويب الاحترافية (FastAPI + واجهة JS)
+```bash
+python -m uvicorn webapp.server:app --host 127.0.0.1 --port 8000
+```
+أو مباشرة بـ `run_webapp.bat` — ثم افتح `http://localhost:8000`
+(صفحة سوق رئيسية + صفحة تحليل لكل سهم + APIs للأسعار اللحظية والتحليل)
+
+### محرك الاحتمالات المدرب (اختياري — يعمل تلقائياً إن وُجد النموذج)
+```bash
+python ml_train.py 80        # تدريب على أكبر 80 سهماً (اختبار زمني صادق)
+```
+
+### التقرير الصباحي الآلي
+```bash
+python daily_report.py                  # إنشاء فوري
+register_morning_report.bat             # تسجيل مهمة يومية 9:30 (الأحد-الخميس)
+```
 
 ## 🧭 التبويبات
 
@@ -37,11 +61,24 @@ python -m streamlit run app.py
 ## 📂 هيكل المشروع
 
 ```
-New Borsa/
+EGX Pro/
 ├── app.py                  # الواجهة الرئيسية (Streamlit)
+├── ml_train.py             # تدريب محرك الاحتمالات (ML)
+├── daily_report.py         # مُشغّل التقرير الصباحي
+├── run.bat                 # تشغيل واجهة Streamlit
+├── run_webapp.bat          # تشغيل بوابة الويب (FastAPI)
+├── register_morning_report.bat  # تسجيل مهمة التقرير الصباحي 9:30
 ├── requirements.txt
+├── models/                 # نموذج ML المدرب (egx_ml.joblib)
+├── reports/                # التقارير الصباحية المحفوظة
+├── webapp/                 # بوابة الويب (FastAPI + JS)
+│   ├── server.py           # الـ APIs
+│   └── static/             # index.html / stock.html / app.js / stock.js / style.css
+├── tests/                  # اختبارات الدخان (smoke tests)
 └── modules/
     ├── tv_data.py          # الأسعار اللحظية الرسمية من TradingView Scanner
+    ├── macro.py            # السياق العالمي (دولار/بترول/ذهب/S&P/سندات/ناشئة)
+    ├── ml_engine.py        # محرك احتمالات ML مدرب على تاريخ البورصة
     ├── data.py             # البيانات التاريخية (Yahoo) + قوائم الأسهم
     ├── news.py             # الأخبار الحقيقية (Google News RSS)
     ├── technical.py        # المؤشرات الفنية (19 مؤشراً + نماذج الشموع)

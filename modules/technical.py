@@ -1,7 +1,12 @@
 """وحدة التحليل الفني (Technical Analysis) باستخدام مكتبة ta."""
+import warnings
+
 import numpy as np
 import pandas as pd
 import ta
+
+# تحذيرات FutureWarning من مكتبة ta الداخلية (تنفيذ PSAR) — ليست من كود المشروع
+warnings.filterwarnings("ignore", category=FutureWarning, module="ta")
 
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:

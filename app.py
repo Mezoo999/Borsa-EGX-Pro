@@ -12,7 +12,6 @@ warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
@@ -408,20 +407,20 @@ def watch_panel():
                 except Exception:
                     pass
             rows_w.append(row_w)
-    st.dataframe(pd.DataFrame(rows_w), use_container_width=True, hide_index=True, height=300,
+    st.dataframe(pd.DataFrame(rows_w), width="stretch", hide_index=True, height=300,
         column_config={
             "السعر الحالي": st.column_config.NumberColumn(format="%.2f"),
             "التغير%": st.column_config.NumberColumn(format="%.2f%%"),
-            "الاتجاه (30 جلسة)": st.column_config.LineChartColumn("الاتجاه", y_min=0.9, y_max=1.1),
+            "الاتجاه (30 جلسة)": st.column_config.LineChartColumn("الاتجاه"),
         })
     st.caption("🔄 يتحدث كل 30 ثانية — الأسعار من TradingView • الإشارة من آخر جلسة")
     pick_w = st.selectbox("إدارة سهم", options=st.session_state.watchlist,
                           format_func=lambda w: f"{w.replace('.CA','')} — {cname(w)[:30]}", key="pick_w")
     wm1, wm2 = st.columns(2)
-    if wm1.button("🎯 افتح التحليل الكامل", use_container_width=True, key="open_w"):
+    if wm1.button("🎯 افتح التحليل الكامل", width="stretch", key="open_w"):
         st.session_state["selected_symbol"] = pick_w
         st.rerun()
-    if wm2.button("🗑️ حذف من المتابعة", use_container_width=True, key="del_w"):
+    if wm2.button("🗑️ حذف من المتابعة", width="stretch", key="del_w"):
         st.session_state.watchlist.remove(pick_w)
         USER_STORE["watchlist"] = st.session_state.watchlist
         store.save_store(USER_STORE)
@@ -472,7 +471,7 @@ def trade_ideas_panel():
                 <div style="color:#7d8db1; font-size:0.62rem; margin-top:0.2rem;">أُضيفت {idea.get('added', '')}</div>
             </div>
             """, unsafe_allow_html=True)
-            if col.button("✕ إنهاء المراقبة", key=f"del_idea_{idea['id']}", use_container_width=True):
+            if col.button("✕ إنهاء المراقبة", key=f"del_idea_{idea['id']}", width="stretch"):
                 store.remove_idea(USER_STORE, idea["id"])
                 st.rerun()
 
@@ -510,7 +509,7 @@ def portfolio_panel():
     m3.metric("📈 الربح/الخسارة", f"{total_pl:+,.0f} ج.م", f"{total_pct:+.2f}%")
     m4.metric("🗂️ عدد المراكز", len(positions))
 
-    st.dataframe(pd.DataFrame(rows_p), use_container_width=True, hide_index=True, height=min(320, 60 + 35 * len(rows_p)),
+    st.dataframe(pd.DataFrame(rows_p), width="stretch", hide_index=True, height=min(320, 60 + 35 * len(rows_p)),
         column_config={
             "متوسط الشراء": st.column_config.NumberColumn(format="%.2f"),
             "السعر الآن": st.column_config.NumberColumn(format="%.2f"),
@@ -533,7 +532,7 @@ def portfolio_panel():
     fig_pf.update_layout(height=max(220, 50 * len(rows_p)), template="plotly_dark",
                          paper_bgcolor="#0d1119", margin=dict(l=10, r=30, t=10, b=10),
                          xaxis_title="العائد %")
-    st.plotly_chart(fig_pf, use_container_width=True)
+    st.plotly_chart(fig_pf, width="stretch")
     st.caption("🔄 القيم الحية من TradingView — تتحدث كل 30 ثانية")
 
     # إدارة مراكز المحفظة
@@ -542,10 +541,10 @@ def portfolio_panel():
     pcol_a, pcol_b = st.columns(2)
     max_sh = int(float(positions[pick_p]["shares"]))
     sell_n = pcol_a.number_input("عدد الأسهم", 1, max_sh, 1, key="pf_sell_n")
-    if pcol_a.button("💸 بيع من المركز", use_container_width=True, key="pf_sell"):
+    if pcol_a.button("💸 بيع من المركز", width="stretch", key="pf_sell"):
         store.sell_position(USER_STORE, pick_p, sell_n)
         st.rerun()
-    if pcol_b.button("🗑️ حذف المركز بالكامل", use_container_width=True, key="pf_del"):
+    if pcol_b.button("🗑️ حذف المركز بالكامل", width="stretch", key="pf_del"):
         USER_STORE["portfolio"].pop(pick_p, None)
         store.save_store(USER_STORE)
         st.rerun()
@@ -589,12 +588,12 @@ with st.sidebar:
         capital = st.number_input("رأس المال (ج.م)", 0.0, 1e9, float(saved.get("capital", 100000.0)), 1000.0, format="%.0f")
         risk_pct = st.slider("مخاطرة/صفقة %", 0.5, 5.0, float(saved.get("risk_pct", 2.0)), 0.1)
         max_pct = st.slider("أقصى نسبة للسهم %", 5.0, 50.0, float(saved.get("max_pct", 10.0)), 1.0)
-        if st.button("💾 حفظ", use_container_width=True):
+        if st.button("💾 حفظ", width="stretch"):
             USER_STORE["settings"].update({"capital": capital, "risk_pct": risk_pct, "max_pct": max_pct})
             store.save_store(USER_STORE)
             st.success("حُفظ ✓")
 
-    if st.button("🔄 تحديث البيانات", use_container_width=True):
+    if st.button("🔄 تحديث البيانات", width="stretch"):
         tvd.clear_cache()
         st.cache_data.clear()
         st.session_state.last_refresh = datetime.now()
@@ -657,7 +656,7 @@ with tab_market:
             st.markdown(open(today_rep, encoding="utf-8").read())
         else:
             st.caption("لا يوجد تقرير لليوم بعد — يُنشأ تلقائياً 9:30 صباحاً أيام التداول (الأحد-الخميس)")
-            if st.button("⚙️ أنشئ تقرير اليوم الآن (30-60 ثانية)", use_container_width=True, key="gen_report"):
+            if st.button("⚙️ أنشئ تقرير اليوم الآن (30-60 ثانية)", width="stretch", key="gen_report"):
                 with st.spinner("جمع بيانات السوق وتحليل الفرص وجمع الأخبار..."):
                     from modules.daily_report import generate_report, save_report
                     md_rep = generate_report()
@@ -665,7 +664,7 @@ with tab_market:
                 st.markdown(md_rep)
         if os.path.exists(latest_rep):
             st.download_button("⬇️ تحميل التقرير", open(latest_rep, encoding="utf-8").read().encode("utf-8-sig"),
-                               "egx_daily_report.md", "text/markdown", use_container_width=True, key="dl_report")
+                               "egx_daily_report.md", "text/markdown", width="stretch", key="dl_report")
 
     st.markdown("---")
 
@@ -761,7 +760,7 @@ with tab_market:
     else:
         scr_symbols = all_symbols_list()
 
-    if st.button("🚀 شغّل الفحص", type="primary", use_container_width=True, key="run_scr"):
+    if st.button("🚀 شغّل الفحص", type="primary", width="stretch", key="run_scr"):
         with st.spinner(f"تحليل {len(scr_symbols)} سهم..."):
             bulk = cached_bulk(tuple(scr_symbols), screener_period)
             st.session_state.screener_df = tv_overlay(build_screener(bulk)) if bulk else pd.DataFrame()
@@ -812,23 +811,23 @@ with tab_market:
             display.insert(3, "الاتجاه (30 جلسة)", [sparks_scr.get(s_, None) for s_ in display["الرمز"]])
         except Exception:
             pass
-        st.dataframe(display, use_container_width=True, hide_index=True, height=380,
+        st.dataframe(display, width="stretch", hide_index=True, height=380,
             column_config={
                 "التغير%": st.column_config.NumberColumn(format="%.2f%%"),
                 "السعر": st.column_config.NumberColumn(format="%.2f"),
                 "RSI": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f"),
                 "الثقة%": st.column_config.ProgressColumn(min_value=0, max_value=100),
-                "الاتجاه (30 جلسة)": st.column_config.LineChartColumn("الاتجاه", y_min=0.9, y_max=1.1),
+                "الاتجاه (30 جلسة)": st.column_config.LineChartColumn("الاتجاه"),
             })
 
         pick = st.selectbox("افتح تحليل سهم من النتائج", options=df_scr["الرمز"].tolist(),
                             format_func=lambda s: f"{s} — {get_company_name(s)}", key="pick_scr")
-        if st.button("➡️ افتح التحليل المفصل", key="open_scr", use_container_width=True):
+        if st.button("➡️ افتح التحليل المفصل", key="open_scr", width="stretch"):
             st.session_state["selected_symbol"] = pick
             st.rerun()
 
         csv = display.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("⬇️ تصدير CSV", csv, "egx_market.csv", "text/csv", use_container_width=True)
+        st.download_button("⬇️ تصدير CSV", csv, "egx_market.csv", "text/csv", width="stretch")
 
     else:
         st.info("اضغط **شغّل الفحص** لعرض تحليل السوق الكامل.")
@@ -853,7 +852,7 @@ with tab_portfolio:
             new_cost = st.number_input("متوسط الشراء (ج.م)", min_value=0.01, step=0.01, value=prefill_v, key="pf_new_cost")
         with fcol4:
             st.write("")
-            if st.button("💾 تسجيل الصفقة", type="primary", use_container_width=True, key="pf_add"):
+            if st.button("💾 تسجيل الصفقة", type="primary", width="stretch", key="pf_add"):
                 store.buy_position(USER_STORE, new_sym, int(new_sh), float(new_cost))
                 st.success(f"✓ سُجلت: {int(new_sh)} سهم {new_sym.replace('.CA','')} بمتوسط {new_cost:,.2f}")
                 st.rerun()
@@ -883,7 +882,7 @@ with tab_advisor:
         adv_symbols = all_symbols_list()
 
     adv_key = f"adv_{adv_filter}_{len(adv_symbols)}"
-    if st.button("🚀 حلل السوق واعرض التوصيات", type="primary", use_container_width=True, key="run_adv") or adv_key not in st.session_state:
+    if st.button("🚀 حلل السوق واعرض التوصيات", type="primary", width="stretch", key="run_adv") or adv_key not in st.session_state:
         with st.spinner(f"🧠 تحليل {len(adv_symbols)} سهم بمحرك المؤشرات... (10-30 ثانية)"):
             bulk_adv = cached_bulk(tuple(adv_symbols), "6mo")
             st.session_state[adv_key] = tv_overlay(rank_opportunities(bulk_adv, adv_filter), chg_col="التغير اليوم%") if bulk_adv else pd.DataFrame()
@@ -996,10 +995,10 @@ with tab_advisor:
                     </div>
                     """, unsafe_allow_html=True)
                 hc1, hc2 = st.columns(2)
-                if hc1.button("🔬 تحليل كامل", key=f"hc_{sym}", use_container_width=True):
+                if hc1.button("🔬 تحليل كامل", key=f"hc_{sym}", width="stretch"):
                     st.session_state["selected_symbol"] = sym
                     st.rerun()
-                if hc2.button("🎯 راقب الصفقة", key=f"hcid_{sym}", use_container_width=True):
+                if hc2.button("🎯 راقب الصفقة", key=f"hcid_{sym}", width="stretch"):
                     add_trade_idea(sym, float(r["السعر"]),
                                    float(r.get("وقف خسارة", 0) or 0),
                                    float(r.get("هدف1", 0) or 0), None)
@@ -1060,10 +1059,10 @@ with tab_advisor:
                 </div>
                 """, unsafe_allow_html=True)
                 bc1, bc2 = st.columns(2)
-                if bc1.button("📊 حلّل", key=f"an_{sym}", use_container_width=True):
+                if bc1.button("📊 حلّل", key=f"an_{sym}", width="stretch"):
                     st.session_state["selected_symbol"] = sym
                     st.rerun()
-                if bc2.button("⭐ تابع", key=f"wt_{sym}", use_container_width=True):
+                if bc2.button("⭐ تابع", key=f"wt_{sym}", width="stretch"):
                     if sym not in st.session_state.watchlist:
                         st.session_state.watchlist.append(sym)
                         persist_watch()
@@ -1078,7 +1077,7 @@ with tab_advisor:
         cols_avail = [c for c in cols_to_show if c in df_adv.columns]
         adv_display = df_adv[cols_avail].copy()
         adv_display.insert(1, "الشركة", [get_company_name(s)[:25] for s in adv_display["الرمز"]])
-        st.dataframe(adv_display, use_container_width=True, hide_index=True, height=400,
+        st.dataframe(adv_display, width="stretch", hide_index=True, height=400,
             column_config={
                 "درجة فنية": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.0f"),
                 "التغير اليوم%": st.column_config.NumberColumn(format="%.2f%%"),
@@ -1093,17 +1092,17 @@ with tab_advisor:
         pick_adv = st.selectbox("افتح تحليل سهم من التوصيات", options=df_adv["الرمز"].tolist(),
                                 format_func=lambda s: f"{s.replace('.CA','')} — {get_company_name(s)[:30]}", key="pick_adv")
         pv1, pv2 = st.columns(2)
-        if pv1.button("🎯 افتح تحليل خبير البورصة", key="open_adv", use_container_width=True):
+        if pv1.button("🎯 افتح تحليل خبير البورصة", key="open_adv", width="stretch"):
             st.session_state["selected_symbol"] = pick_adv
             st.rerun()
-        if pv2.button("⭐ أضف للمتابعة السريعة", key="watch_adv", use_container_width=True):
+        if pv2.button("⭐ أضف للمتابعة السريعة", key="watch_adv", width="stretch"):
             if pick_adv not in st.session_state.watchlist:
                 st.session_state.watchlist.append(pick_adv)
                 persist_watch()
             st.success("أُضيف ✓")
 
         csv_adv = adv_display.to_csv(index=False).encode('utf-8-sig')
-        st.download_button("⬇️ تصدير التوصيات CSV", csv_adv, "egx_recommendations.csv", "text/csv", use_container_width=True)
+        st.download_button("⬇️ تصدير التوصيات CSV", csv_adv, "egx_recommendations.csv", "text/csv", width="stretch")
     else:
         st.info("المحرك يعمل تلقائياً — سيظهر الكروت بعد لحظات")
 
@@ -1144,7 +1143,7 @@ with tab_advisor:
             tr1.metric("توصيات مُغلقة", len(closed_r))
             tr2.metric("حققت الهدف", wins_r)
             tr3.metric("نسبة النجاح الفعلية", f"{wins_r / len(closed_r) * 100:.0f}%")
-        st.dataframe(df_rec.sort_values("التاريخ", ascending=False), use_container_width=True,
+        st.dataframe(df_rec.sort_values("التاريخ", ascending=False), width="stretch",
                      hide_index=True, height=260,
                      column_config={
                          "العائد%": st.column_config.NumberColumn(format="%.2f%%"),
@@ -1351,7 +1350,7 @@ with tab_detail:
 
         # تسجيل الصفقة في المراقبة اللحظية
         idea_entry = live_price if live_price is not None else last_close
-        if st.button("🎯 راقب هذه الصفقة لحظياً (الدخول الحالي + الوقف + الأهداف)", type="primary", use_container_width=True, key=f"idea_{symbol}"):
+        if st.button("🎯 راقب هذه الصفقة لحظياً (الدخول الحالي + الوقف + الأهداف)", type="primary", width="stretch", key=f"idea_{symbol}"):
             add_trade_idea(symbol, idea_entry,
                            plan.get("stop_loss", last_close * 0.95),
                            plan.get("target_1", last_close * 1.05),
@@ -1519,7 +1518,7 @@ with tab_detail:
             st.markdown("#### 📊 الأداء التاريخي")
             perf_df, perf_raw = cached_performance(symbol)
             if not perf_df.empty:
-                st.dataframe(perf_df, hide_index=True, use_container_width=True, height=210,
+                st.dataframe(perf_df, hide_index=True, width="stretch", height=210,
                     column_config={"العائد %": st.column_config.NumberColumn(format="%.2f%%")})
                 if perf_raw.get("منذ الإنشاء") is not None:
                     st.caption(f"🏛️ منذ {perf_raw.get('تاريخ البداية','')}: **{perf_raw['منذ الإنشاء']:+.0f}%**")
@@ -1591,7 +1590,7 @@ with tab_detail:
                           legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center", font=dict(size=10)),
                           margin=dict(l=10, r=10, t=40, b=10), hovermode="x unified")
         fig.update_xaxes(type="category")
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": True})
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": True})
 
         # تبويبات متقدمة
         t_tech, t_fund, t_data = st.tabs(["🔧 المؤشرات الكاملة", "🏦 المالي", "📋 البيانات"])
@@ -1623,16 +1622,16 @@ with tab_detail:
 
             rsi_v = last_signals.get("RSI", 50)
             with g_rsi:
-                st.plotly_chart(make_gauge(rsi_v, "RSI", "#ffab00"), use_container_width=True)
+                st.plotly_chart(make_gauge(rsi_v, "RSI", "#ffab00"), width="stretch")
             with g_macd:
                 macd_v = last_signals.get("MACD", 0)
                 sig_v = last_signals.get("MACD_Signal", 0)
                 macd_ratio = (macd_v - sig_v) / abs(sig_v) * 100 if sig_v and sig_v != 0 else 0
-                st.plotly_chart(make_gauge(max(-100, min(100, macd_ratio)), "MACD vs Signal", "#2962ff", -100, 100, "%"), use_container_width=True)
+                st.plotly_chart(make_gauge(max(-100, min(100, macd_ratio)), "MACD vs Signal", "#2962ff", -100, 100, "%"), width="stretch")
             with g_adx:
-                st.plotly_chart(make_gauge(last_signals.get("ADX", 0), "ADX", "#ab47bc", 0, 80), use_container_width=True)
+                st.plotly_chart(make_gauge(last_signals.get("ADX", 0), "ADX", "#ab47bc", 0, 80), width="stretch")
             with g_stoch:
-                st.plotly_chart(make_gauge(last_signals.get("Stoch_K", 50), "Stochastic", "#29b6f6"), use_container_width=True)
+                st.plotly_chart(make_gauge(last_signals.get("Stoch_K", 50), "Stochastic", "#29b6f6"), width="stretch")
 
             ind_tbl = pd.DataFrame([
                 ["RSI (14)", f"{last_signals.get('RSI',0):.1f}", "30 بيع مفرط | 70 شراء مفرط"],
@@ -1653,7 +1652,7 @@ with tab_detail:
                 ["حجم/متوسط", f"{last_signals.get('Vol_Ratio',0):.1f}x", ">1.5 حجم مرتفع"],
                 ["ATR", f"{last_signals.get('ATR',0):,.2f}", f"تقلب {(last_signals.get('ATR',0)/last_close*100):.1f}%" if last_close else ""],
             ], columns=["المؤشر", "القيمة", "الملاحظة"])
-            st.dataframe(ind_tbl, use_container_width=True, hide_index=True)
+            st.dataframe(ind_tbl, width="stretch", hide_index=True)
 
         with t_fund:
             metrics = analyze_fundamental(symbol)
@@ -1713,7 +1712,7 @@ with tab_detail:
         with t_data:
             show = df_ind.tail(100).copy()
             show.index = pd.to_datetime(show.index).strftime("%Y-%m-%d")
-            st.dataframe(show.round(2), use_container_width=True, height=380)
+            st.dataframe(show.round(2), width="stretch", height=380)
             csv2 = df_ind.to_csv().encode('utf-8-sig')
             st.download_button("⬇️ تحميل البيانات CSV", csv2, f"{symbol}_{period}.csv", "text/csv")
 
@@ -1747,7 +1746,7 @@ with tab_watch:
         st.markdown("#### ➕ إضافة سهم للمتابعة")
         add_sym = st.selectbox("اختر سهم لإضافته", options=[s for s in all_symbols_list() if s not in st.session_state.watchlist],
                                format_func=lambda s: f"{s.replace('.CA','')} — {cname(s)[:30]}", key="add_watch_sym")
-        if st.button("➕ أضف للمتابعة", type="primary", use_container_width=True, key="btn_add_watch"):
+        if st.button("➕ أضف للمتابعة", type="primary", width="stretch", key="btn_add_watch"):
             st.session_state.watchlist.append(add_sym)
             USER_STORE["watchlist"] = st.session_state.watchlist
             store.save_store(USER_STORE)
@@ -1767,7 +1766,7 @@ with tab_watch:
         with al3:
             alert_below = st.number_input("⬇️ ينزل تحت", 0.0, step=0.01, key="alert_bl", format="%.2f")
 
-        if st.button("🔔 حفظ التنبيه", type="primary", key="alert_save", use_container_width=True):
+        if st.button("🔔 حفظ التنبيه", type="primary", key="alert_save", width="stretch"):
             store.set_alert(USER_STORE, alert_sym,
                             above=alert_above if alert_above > 0 else None,
                             below=alert_below if alert_below > 0 else None)
@@ -1832,7 +1831,7 @@ with tab_tools:
         else:
             scalp_syms = symbols_by_mcap(100)
 
-        if st.button("🚀 افحص نماذج السوينغ", type="primary", use_container_width=True, key="run_scalp"):
+        if st.button("🚀 افحص نماذج السوينغ", type="primary", width="stretch", key="run_scalp"):
             with st.spinner(f"فحص {len(scalp_syms)} سهم بنماذج السوينغ..."):
                 bulk_s = cached_bulk(tuple(scalp_syms), "3mo")
                 rows = []
@@ -1875,7 +1874,7 @@ with tab_tools:
         if "scalp_df" in st.session_state and not st.session_state["scalp_df"].empty:
             df_scalp = st.session_state["scalp_df"]
             st.dataframe(df_scalp[["الرمز","الشركة","السعر","التغير%","النموذج","الإشارة","العائد/المخاطرة","هدف1","وقف خسارة","السيولة","RSI","ثقة%"]],
-                         use_container_width=True, hide_index=True, height=380,
+                         width="stretch", hide_index=True, height=380,
                          column_config={
                              "التغير%": st.column_config.NumberColumn(format="%.2f%%"),
                              "السعر": st.column_config.NumberColumn(format="%.2f"),
@@ -1886,7 +1885,7 @@ with tab_tools:
                          })
             pick_s = st.selectbox("افتح تحليل", options=df_scalp["الرمز"].tolist(),
                                   format_func=lambda s: f"{s} — {get_company_name(s)}", key="pick_scalp")
-            if st.button("➡️ افتح التحليل المفصل", key="open_scalp", use_container_width=True):
+            if st.button("➡️ افتح التحليل المفصل", key="open_scalp", width="stretch"):
                 st.session_state["selected_symbol"] = pick_s
                 st.rerun()
         else:
@@ -1911,7 +1910,7 @@ with tab_tools:
                     figc.add_trace(go.Scatter(x=short_dates(dfc.index), y=norm, name=sym.replace(".CA",""), mode="lines"))
                 figc.update_layout(height=420, template="plotly_dark", title="الأداء النسبي (البداية = 100)",
                                    hovermode="x unified")
-                st.plotly_chart(figc, use_container_width=True)
+                st.plotly_chart(figc, width="stretch")
         else:
             st.info("اختر سهمين على الأقل")
 
@@ -1919,7 +1918,7 @@ with tab_tools:
         st.caption("اختبر استراتيجية المنصة على التاريخ — هل توصياتها تنجح فعلاً؟")
         bt_hold = st.slider("مدة الاحتفاظ (أيام)", 3, 20, 5, 1)
         bt_threshold = st.slider("قوة الإشارة", 2, 6, 4, 1)
-        if st.button("🧪 شغّل الاختبار على السهم الحالي", type="primary", use_container_width=True):
+        if st.button("🧪 شغّل الاختبار على السهم الحالي", type="primary", width="stretch"):
             with st.spinner("اختبار تاريخي..."):
                 df_bt = cached_single(symbol, "2y", "1d")
                 res = backtest_signals(df_bt, hold_days=bt_hold, threshold=bt_threshold)
@@ -1945,7 +1944,7 @@ with tab_tools:
                         fig_bt.add_trace(go.Histogram(x=trd["return"], nbinsx=20, marker_color="#2962ff", opacity=0.7))
                         fig_bt.add_vline(x=0, line_dash="dash", line_color="#ff3d57")
                         fig_bt.update_layout(height=280, template="plotly_dark", title="توزيع العوائد %")
-                        st.plotly_chart(fig_bt, use_container_width=True)
+                        st.plotly_chart(fig_bt, width="stretch")
 
     # ===== لوحة الصناديق المصرية =====
     with st.expander("🏦 الصناديق المصرية (بلتون وأمثالها) — الشرح الكامل", expanded=False):
@@ -1971,7 +1970,7 @@ with tab_tools:
                 for s in fund_house_syms:
                     row_tv = tvd.one(s)
                     price_txt = f"— {row_tv['close']:,.2f} ({row_tv['change_pct']:+.2f}%)" if row_tv else ""
-                    if st.button(f"📊 {s.replace('.CA','')} — {cname(s)[:30]} {price_txt}", key=f"fh_{s}", use_container_width=True):
+                    if st.button(f"📊 {s.replace('.CA','')} — {cname(s)[:30]} {price_txt}", key=f"fh_{s}", width="stretch"):
                         st.session_state["selected_symbol"] = s
                         st.rerun()
             with fh1:

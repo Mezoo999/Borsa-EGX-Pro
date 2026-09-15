@@ -9,6 +9,17 @@ import json
 import pandas as pd
 import streamlit.components.v1 as components
 
+def _render(html: str, height: int):
+    """عرض HTML تفاعلي (شموع/أعمدة) داخل Streamlit.
+
+    ملاحظة مهمة: نستخدم components.html (iframe معزول) عن قصد — البديل الجديد
+    st.html يدرج الكود في الصفحة الرئيسية بدون عزل، ما يمنع تحميل مكتبات CDN
+    (Lightweight Charts / ECharts) بترتيب صحيح ويفسد إعدادات ويدجت TradingView.
+    الـ iframe المعزول هو الطريقة الصحيحة والمضمونة لعرض سكربتات طرف ثالث.
+    """
+    components.html(html, height=height, scrolling=False)
+
+
 DARK_BG = "#0d1119"
 GRID_COLOR = "rgba(31,45,69,0.45)"
 TEXT_COLOR = "#cfd8dc"

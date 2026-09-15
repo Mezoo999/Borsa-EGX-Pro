@@ -11,7 +11,8 @@ import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -27,6 +28,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(BASE, "static")
 
 app = FastAPI(title="EGX Pro")
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # خدمة ملفات الواجهة (CSS/JS)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -54,6 +56,25 @@ def _snapshot():
 
 def _registry():
     return tvd.get_registry()
+
+
+@app.get("/api/health")
+def api_health():
+    """فحص صحة الخادم."""
+    return {"status": "ok"}
+
+
+@app.get("/api/quote/{symbol}")
+def api_quote(symbol: str):
+    """سعر لحظي خفيف (بدون تحليل) — لتحديث السعر بسرعة في صفحة السهم."""
+    symbol = symbol.upper()
+    if not symbol.endswith(".CA"):
+        symbol += ".CA"
+    row = tvd.one(symbol)
+    if not row:
+        return {"error": "لا توجد بيانات"}
+    return {"symbol": symbol, "short": symbol.replace(".CA", ""),
+            "price": row["close"], "chg": row["change_pct"]}
 
 
 # ---------- الصفحات ----------
@@ -155,7 +176,7 @@ def api_stock(symbol: str):
         tv_r = snap.get(symbol.replace(".CA", ""))
         df = get_stock_data(symbol, "6mo")
         if df is None or df.empty:
-            return {"error": "لا توجد بيانات"}
+            raise HTTPException(status_code=404, detail="لا توجد بيانات تاريخية لهذا الرمز")
         # تحديث شمعة اليوم بالسعر اللحظي
         if tv_r:
             df = df.copy()
@@ -238,10 +259,11 @@ def api_candles(symbol: str):
                 df.iloc[-1, df.columns.get_loc("High")] = tv_r["close"]
             if tv_r["close"] < float(df["Low"].iloc[-1]):
                 df.iloc[-1, df.columns.get_loc("Low")] = tv_r["close"]
-        sma20 = df["Close"].rolling(20).mean()
-        sma50 = df["Close"].rolling(50).mean()
-        candles, volumes, l20, l50 = [], [], [], []
+        # مهم: نحسب المتوسطات على نفس النافذة المعروضة (آخر 180 شمعة) لتفادي انزياح الخطوط
         d = df.tail(180)
+        sma20 = d["Close"].rolling(20).mean()
+        sma50 = d["Close"].rolling(50).mean()
+        candles, volumes, l20, l50 = [], [], [], []
         for i, (idx, r) in enumerate(d.iterrows()):
             t = str(idx)[:10]
             o, h, l, c = float(r["Open"]), float(r["High"]), float(r["Low"]), float(r["Close"])

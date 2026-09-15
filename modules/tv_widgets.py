@@ -146,5 +146,10 @@ def tradingview_screener_widget(height: int = 560):
 
 
 def render_tv(component_html: str, height: int):
-    """عرض ويدجت داخل Streamlit."""
+    """عرض ويدجت TradingView داخل Streamlit.
+
+    نستخدم components.html (iframe معزول) عن قصد: ويدجت TradingView يقرأ إعداداته
+    من وسم <script> مرافق ولا يعمل إلا داخل iframe معزول — الإدراج المباشر
+    (st.html) يفقد الإعدادات ويظهر الويدجت فارغاً.
+    """
     components.html(component_html, height=height, scrolling=False)
