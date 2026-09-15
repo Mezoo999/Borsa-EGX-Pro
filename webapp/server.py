@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import threading
+from contextlib import asynccontextmanager
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -15,19 +16,29 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-from modules import tv_data as tvd, macro, ml_engine
+from modules import tv_data as tvd, macro, ml_engine, notify
 import modules.news as newsfeed
 from modules.data import get_stock_data, get_company_name, get_bulk_data
 from modules.technical import add_indicators, get_last_signals
 from modules.signals import (get_support_resistance, calculate_technical_score,
                              generate_signal, calculate_price_targets)
-from modules.storage import load_store
+from modules.advisor import rank_opportunities
+from modules.storage import (load_store, add_watch, remove_watch,
+                             buy_position, sell_position, set_alert, remove_alert)
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.join(BASE, "static")
 
-app = FastAPI(title="EGX Pro")
+@asynccontextmanager
+async def lifespan(_app):
+    # خيط خلفي: فحص التنبيهات السعرية وإرسال الإشعارات كل دقيقة
+    threading.Thread(target=_alert_loop, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="EGX Pro", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # خدمة ملفات الواجهة (CSS/JS)
@@ -58,6 +69,79 @@ def _registry():
     return tvd.get_registry()
 
 
+# ---------- تنبيهات الأسعار + إشعارات ----------
+_alert_fired = set()  # مفاتيح "YYYY-MM-DD|رمز|اتجاه" — تمنع تكرار الإشعار في اليوم نفسه
+
+
+def _norm_symbol(symbol: str) -> str:
+    """توحيد الرمز إلى صيغة XXXX.CA."""
+    symbol = (symbol or "").strip().upper()
+    if not symbol:
+        return ""
+    return symbol if symbol.endswith(".CA") else symbol + ".CA"
+
+
+def _check_alerts():
+    try:
+        st_ = load_store()
+        alerts = st_.get("alerts") or {}
+        if not alerts:
+            return
+        snap = _snapshot()
+        if not snap:
+            return
+        today = time.strftime("%Y-%m-%d")
+        for sym, a in alerts.items():
+            row = snap.get(sym.replace(".CA", ""))
+            if not row:
+                continue
+            price = row["close"]
+            msgs = []
+            above = a.get("above")
+            below = a.get("below")
+            if above and price >= above and f"{today}|{sym}|above" not in _alert_fired:
+                _alert_fired.add(f"{today}|{sym}|above")
+                msgs.append(f"⬆️ {sym.replace('.CA', '')} صعد فوق {above:,.2f} ج.م — الآن {price:,.2f}")
+            if below and price <= below and f"{today}|{sym}|below" not in _alert_fired:
+                _alert_fired.add(f"{today}|{sym}|below")
+                msgs.append(f"⬇️ {sym.replace('.CA', '')} هبط تحت {below:,.2f} ج.م — الآن {price:,.2f}")
+            for m in msgs:
+                notify.send("🔔 تنبيه سعر — EGX Pro", m)
+    except Exception:
+        pass
+
+
+def _alert_loop():
+    while True:
+        try:
+            _check_alerts()
+        except Exception:
+            pass
+        time.sleep(60)
+
+
+# نماذج طلبات الكتابة
+class PositionIn(BaseModel):
+    symbol: str
+    shares: float
+    avg_cost: float
+
+
+class SellIn(BaseModel):
+    symbol: str
+    shares: float
+
+
+class WatchIn(BaseModel):
+    symbol: str
+
+
+class AlertIn(BaseModel):
+    symbol: str
+    above: float | None = None
+    below: float | None = None
+
+
 @app.get("/api/health")
 def api_health():
     """فحص صحة الخادم."""
@@ -86,6 +170,21 @@ def index():
 @app.get("/stock/{symbol}")
 def stock_page(symbol: str):
     return FileResponse(os.path.join(STATIC, "stock.html"))
+
+
+@app.get("/opportunities")
+def opportunities_page():
+    return FileResponse(os.path.join(STATIC, "opportunities.html"))
+
+
+@app.get("/portfolio")
+def portfolio_page():
+    return FileResponse(os.path.join(STATIC, "portfolio.html"))
+
+
+@app.get("/watchlist")
+def watchlist_page():
+    return FileResponse(os.path.join(STATIC, "watchlist.html"))
 
 
 # ---------- APIs ----------
@@ -277,3 +376,184 @@ def api_candles(symbol: str):
                 l50.append({"time": t, "value": round(float(v50), 2)})
         return {"candles": candles, "volumes": volumes, "sma20": l20, "sma50": l50}
     return cached(f"candles_{symbol}", 120, build)
+
+
+# ---------- الفرص (ترتيب آلي) ----------
+@app.get("/api/opportunities")
+def api_opportunities(universe: int = Query(30, ge=10, le=120)):
+    def build():
+        reg = _registry()
+        syms = sorted(reg.keys(),
+                      key=lambda s: (reg[s].get("tv") or {}).get("market_cap") or 0,
+                      reverse=True)[:universe]
+        bulk = get_bulk_data(syms, "6mo")
+        df = rank_opportunities(bulk, "الكل")
+        if df is None or df.empty:
+            return []
+        snap = _snapshot()
+        out = []
+        for _, r in df.iterrows():
+            sym = r.get("الرمز", "")
+            tv = snap.get(sym.replace(".CA", ""))
+            out.append({
+                "symbol": sym, "short": sym.replace(".CA", ""),
+                "name": get_company_name(sym),
+                "price": round(tv["close"], 2) if tv else round(r.get("السعر", 0), 2),
+                "chg": round(tv["change_pct"], 2) if tv else round(r.get("التغير اليوم%", 0), 2),
+                "score": int(r.get("درجة فنية", 0)),
+                "signal": r.get("إشارة", ""),
+                "setup": r.get("النموذج", ""),
+                "tier": r.get("تصنيف", ""),
+                "wyckoff": r.get("وايكوف", ""),
+                "rr": r.get("العائد/المخاطرة", ""),
+                "target1": round(float(r.get("هدف1", 0)), 2),
+                "stop": round(float(r.get("وقف خسارة", 0)), 2),
+                "liquidity": r.get("السيولة", ""),
+            })
+        return out
+    return cached(f"opportunities_{universe}", 300, build)
+
+
+# ---------- المحفظة ----------
+@app.get("/api/portfolio")
+def api_portfolio():
+    def build():
+        st_ = load_store()
+        snap = _snapshot()
+        reg = _registry()
+        positions = []
+        tot_val = tot_cost = 0.0
+        for sym, p in (st_.get("portfolio") or {}).items():
+            sh = float(p["shares"]); cost = float(p["avg_cost"])
+            tv = snap.get(sym.replace(".CA", ""))
+            now = tv["close"] if tv else cost
+            val = sh * now; basis = sh * cost; pl = val - basis
+            plp = (now - cost) / cost * 100 if cost else 0
+            tot_val += val; tot_cost += basis
+            positions.append({
+                "symbol": sym, "short": sym.replace(".CA", ""),
+                "name": (reg.get(sym) or {}).get("name") or get_company_name(sym),
+                "shares": int(sh), "avg_cost": round(cost, 2),
+                "price": round(now, 2), "chg": round(tv["change_pct"], 2) if tv else 0,
+                "value": round(val, 0), "cost": round(basis, 0),
+                "pl": round(pl, 0), "pl_pct": round(plp, 2),
+            })
+        total_pl = tot_val - tot_cost
+        return {"positions": positions,
+                "summary": {"value": round(tot_val, 0), "cost": round(tot_cost, 0),
+                            "pl": round(total_pl, 0),
+                            "pl_pct": round(total_pl / tot_cost * 100, 2) if tot_cost else 0,
+                            "count": len(positions)}}
+    return cached("portfolio", 30, build)
+
+
+@app.post("/api/portfolio")
+def add_position(body: PositionIn):
+    sym = _norm_symbol(body.symbol)
+    if not sym:
+        raise HTTPException(status_code=400, detail="رمز غير صالح")
+    st_ = load_store()
+    buy_position(st_, sym, body.shares, body.avg_cost)
+    return {"ok": True}
+
+
+@app.post("/api/portfolio/sell")
+def sell_position_api(body: SellIn):
+    sym = _norm_symbol(body.symbol)
+    st_ = load_store()
+    if not sell_position(st_, sym, body.shares):
+        raise HTTPException(status_code=404, detail="المركز غير موجود")
+    return {"ok": True}
+
+
+@app.delete("/api/portfolio/{symbol}")
+def del_position(symbol: str):
+    sym = _norm_symbol(symbol)
+    st_ = load_store()
+    st_["portfolio"].pop(sym, None)
+    import modules.storage as _store
+    _store.save_store(st_)
+    return {"ok": True}
+
+
+# ---------- المتابعة ----------
+@app.get("/api/watchlist")
+def api_watchlist():
+    def build():
+        st_ = load_store()
+        syms = list(st_.get("watchlist") or [])
+        snap = _snapshot()
+        reg = _registry()
+        bulk = get_bulk_data(syms, "3mo") if syms else {}
+        out = []
+        for sym in syms:
+            tv = snap.get(sym.replace(".CA", ""))
+            signal = "—"
+            df = bulk.get(sym)
+            if df is not None and len(df) > 30:
+                try:
+                    d = add_indicators(df)
+                    s = get_last_signals(d)
+                    signal = generate_signal(s, d)["action"]
+                except Exception:
+                    signal = "—"
+            out.append({"symbol": sym, "short": sym.replace(".CA", ""),
+                        "name": (reg.get(sym) or {}).get("name") or get_company_name(sym),
+                        "price": tv["close"] if tv else None,
+                        "chg": tv["change_pct"] if tv else None,
+                        "signal": signal})
+        return out
+    return cached("watchlist", 60, build)
+
+
+@app.post("/api/watchlist")
+def add_w(body: WatchIn):
+    sym = _norm_symbol(body.symbol)
+    if not sym:
+        raise HTTPException(status_code=400, detail="رمز غير صالح")
+    st_ = load_store()
+    add_watch(st_, sym)
+    return {"ok": True}
+
+
+@app.delete("/api/watchlist/{symbol}")
+def del_w(symbol: str):
+    sym = _norm_symbol(symbol)
+    st_ = load_store()
+    remove_watch(st_, sym)
+    return {"ok": True}
+
+
+# ---------- التنبيهات ----------
+@app.get("/api/alerts")
+def api_alerts():
+    st_ = load_store()
+    snap = _snapshot()
+    out = []
+    for sym, a in (st_.get("alerts") or {}).items():
+        row = snap.get(sym.replace(".CA", ""))
+        out.append({"symbol": sym, "short": sym.replace(".CA", ""),
+                    "name": get_company_name(sym),
+                    "above": a.get("above"), "below": a.get("below"),
+                    "price": row["close"] if row else None})
+    return out
+
+
+@app.post("/api/alerts")
+def add_alert(body: AlertIn):
+    sym = _norm_symbol(body.symbol)
+    if not sym:
+        raise HTTPException(status_code=400, detail="رمز غير صالح")
+    st_ = load_store()
+    set_alert(st_, sym,
+              above=body.above if body.above and body.above > 0 else None,
+              below=body.below if body.below and body.below > 0 else None)
+    return {"ok": True}
+
+
+@app.delete("/api/alerts/{symbol}")
+def del_alert(symbol: str):
+    sym = _norm_symbol(symbol)
+    st_ = load_store()
+    remove_alert(st_, sym)
+    return {"ok": True}

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""اختبارات دخان سريعة لمحركات EGX Pro (بدون إنترنت).
+"""اختبارات دخان لمحركات EGX Pro (بدون إنترنت).
 
 التشغيل:
     python tests/smoke_test.py
@@ -38,30 +38,61 @@ def _synth(n=300, seed=42):
 
 def t_technical():
     from modules.technical import add_indicators, get_last_signals
-    sig = get_last_signals(add_indicators(_synth()))
+    d = add_indicators(_synth())
+    sig = get_last_signals(d)
     assert "RSI" in sig and 0 <= sig["RSI"] <= 100
+    assert "SMA20" in sig and "ATR" in sig
+
+
+def t_indicator_bounds():
+    from modules.technical import add_indicators, get_last_signals
+    sig = get_last_signals(add_indicators(_synth(400)))
+    for k in ("RSI", "RSI_9", "Stoch_K", "MFI", "ADX", "CCI"):
+        v = sig.get(k)
+        if v is not None:
+            assert -200 <= v <= 200, f"{k} خارج النطاق: {v}"
 
 
 def t_signals():
     from modules.technical import add_indicators, get_last_signals
-    from modules.signals import generate_signal, calculate_technical_score, calculate_price_targets
+    from modules.signals import generate_signal, calculate_technical_score
     d = add_indicators(_synth())
     sig = get_last_signals(d)
-    assert generate_signal(sig, d)["action"]
-    assert 0 <= calculate_technical_score(sig, d)["score"] <= 100
-    assert "summary" in calculate_price_targets(sig, d)
+    sw = generate_signal(sig, d)
+    sc = calculate_technical_score(sig, d)
+    assert sw["action"] in ("شراء مؤكد", "شراء تدريجي", "بيع / خروج", "تخفيف / حذر", "انتظار / مراقبة")
+    assert 0 <= sc["score"] <= 100
+
+
+def t_targets_order():
+    from modules.technical import add_indicators, get_last_signals
+    from modules.signals import calculate_price_targets
+    d = add_indicators(_synth())
+    s = calculate_price_targets(get_last_signals(d), d)["summary"]
+    assert s["stop_loss"] < s["entry"] < s["T1"] < s["T2"], f"ترتيب غلط: {s}"
 
 
 def t_risk():
     from modules.risk import position_sizing
     r = position_sizing(100000, 2.0, 50.0, 45.0, 10.0)
     assert r["عدد_الأسهم"] > 0
+    assert r["قيمة_المركز"] <= 100000 * 0.10 + 1
 
 
-def t_storage():
+def t_storage_default():
     from modules.storage import DEFAULT_STORE
     for k in ("watchlist", "portfolio", "alerts", "ideas", "rec_log", "settings"):
         assert k in DEFAULT_STORE
+
+
+def t_storage_buy_math():
+    """متوسط التكلفة المدمج يُحسب صحيحاً (مع تعطيل الحفظ)."""
+    import modules.storage as st
+    st.save_store = lambda *a, **k: None  # تعطيل الكتابة على القرص
+    store = {"portfolio": {"COMI.CA": {"shares": 100, "avg_cost": 50.0, "date": "2026-01-01"}}}
+    st.buy_position(store, "COMI.CA", 100, 70.0)
+    p = store["portfolio"]["COMI.CA"]
+    assert p["shares"] == 200 and abs(p["avg_cost"] - 60.0) < 1e-6, p
 
 
 def t_sectors_taxonomy():
@@ -76,14 +107,38 @@ def t_backtest_threshold():
     assert "error" not in r or r.get("total") == 0
 
 
+def t_notify_fallback():
+    """بدون قنوات خارجية → fallback محلي (لا يرفع استثناء)."""
+    from modules import notify
+    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "WEBHOOK_URL"):
+        os.environ.pop(k, None)
+    res = notify.send("test", "body")
+    assert isinstance(res, list) and res, "يجب أن يعيد قائمة نتائج"
+    assert res[0][0] == "log", f"متوقع fallback محلي، وجد {res}"
+
+
+def t_notify_enabled_false():
+    from modules import notify
+    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "WEBHOOK_URL"):
+        os.environ.pop(k, None)
+    assert notify.enabled() is False
+
+
 check("technical", t_technical)
+check("indicator bounds", t_indicator_bounds)
 check("signals", t_signals)
-check("risk", t_risk)
-check("storage", t_storage)
+check("targets order", t_targets_order)
+check("risk sizing", t_risk)
+check("storage default", t_storage_default)
+check("storage buy math", t_storage_buy_math)
 check("sectors taxonomy", t_sectors_taxonomy)
 check("backtest threshold", t_backtest_threshold)
+check("notify fallback", t_notify_fallback)
+check("notify enabled", t_notify_enabled_false)
 
 print("")
 print("=" * 50)
 print("نتيجة: " + str(len(passed)) + " ناجح / " + str(len(failed)) + " فاشل")
+for n, e in failed:
+    print("  ✗ " + n + ": " + str(e))
 sys.exit(1 if failed else 0)

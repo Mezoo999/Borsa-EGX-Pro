@@ -102,3 +102,72 @@ tr.clickable:hover { background: rgba(41,98,255,0.08); }
 .ind-cell .v { color: white; font-weight: 700; font-size: 0.9rem; }
 .caption { color: var(--muted); font-size: 0.68rem; margin-top: 0.5rem; line-height: 1.7; }
 .loading { color: var(--muted); text-align: center; padding: 2rem; }
+
+
+/* ===== شريط التنقل العلوي ===== */
+.topnav { display:flex; gap:0.4rem; flex-wrap:wrap; padding:0.45rem 1.2rem; background:var(--panel2); border-bottom:1px solid var(--border); }
+.topnav a { color:var(--muted); font-weight:700; font-size:0.85rem; padding:0.45rem 0.95rem; border-radius:9px; text-decoration:none; transition:all .15s; }
+.topnav a:hover { color:var(--text); background:rgba(41,98,255,.08); text-decoration:none; }
+.topnav a.active { background:var(--blue); color:#fff; }
+
+/* ===== عناوين وضوابط الصفحات ===== */
+.page-head { margin:1rem 0 0.8rem; }
+.page-head h2 { font-size:1.25rem; margin-bottom:0.3rem; }
+.page-head p { color:var(--muted); font-size:0.8rem; }
+.controls { display:flex; gap:0.7rem; align-items:center; flex-wrap:wrap; margin-bottom:0.8rem; }
+.seg { display:inline-flex; background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:0.25rem; gap:0.2rem; }
+.seg button { background:transparent; border:none; color:var(--muted); font-weight:700; font-size:0.8rem; padding:0.45rem 0.95rem; border-radius:8px; cursor:pointer; font-family:inherit; transition:all .15s; }
+.seg button:hover { color:var(--text); }
+.seg button.active { background:var(--blue); color:#fff; }
+.btn-primary { background:var(--blue); color:#fff; border:none; font-weight:800; font-size:0.85rem; padding:0.55rem 1.2rem; border-radius:10px; cursor:pointer; font-family:inherit; transition:all .15s; }
+.btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 14px rgba(41,98,255,.35); }
+.btn-ghost { background:var(--panel2); color:var(--text); border:1px solid var(--border); font-weight:700; font-size:0.8rem; padding:0.45rem 0.95rem; border-radius:9px; cursor:pointer; font-family:inherit; transition:all .15s; }
+.btn-ghost:hover { border-color:var(--blue); color:var(--blue2); }
+.status-line { font-size:0.78rem; color:var(--muted); margin-bottom:0.7rem; min-height:1.2rem; }
+
+/* ===== بطاقات الفرص ===== */
+.opp-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:0.8rem; }
+.opp-card { display:block; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:0.85rem 0.95rem; text-decoration:none; color:var(--text); transition:transform .15s, border-color .15s; }
+.opp-card:hover { transform:translateY(-3px); border-color:var(--blue); text-decoration:none; }
+.opp-top { display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem; }
+.opp-sym { color:#fff; font-weight:800; font-size:1.05rem; }
+.opp-name { color:var(--muted); font-size:0.7rem; margin-top:0.1rem; }
+.badge { font-size:0.68rem; font-weight:800; padding:0.2rem 0.6rem; border-radius:20px; border:1px solid; white-space:nowrap; }
+.opp-score { display:flex; align-items:center; gap:0.6rem; margin:0.6rem 0; }
+.opp-score-num { font-size:1.4rem; font-weight:900; line-height:1; }
+.opp-score-num span { font-size:0.65rem; color:var(--muted); }
+.bar { flex:1; height:7px; background:var(--panel2); border-radius:4px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:4px; transition:width .4s; }
+.opp-setup { font-size:0.78rem; color:#90caf9; margin-bottom:0.4rem; }
+.opp-price { font-size:1.05rem; font-weight:700; margin-bottom:0.4rem; }
+.opp-price .up, .opp-price .down { font-size:0.78rem; }
+.opp-meta { display:flex; justify-content:space-between; font-size:0.74rem; padding:0.35rem 0; border-top:1px solid rgba(31,45,69,.45); }
+.opp-foot { display:flex; justify-content:space-between; font-size:0.7rem; margin-top:0.4rem; }
+.tier { color:var(--amber); font-weight:700; }
+
+/* ===== محفظة ===== */
+.sum-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:0.7rem; margin-bottom:0.9rem; }
+.sum-card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:0.7rem 0.9rem; }
+.sum-card .lbl { color:var(--muted); font-size:0.7rem; font-weight:700; }
+.sum-card .val { font-size:1.35rem; font-weight:800; margin-top:0.15rem; }
+.form-row { display:grid; grid-template-columns:2fr 1fr 1.2fr auto; gap:0.5rem; align-items:end; margin-bottom:0.8rem; }
+@media (max-width:720px) { .form-row { grid-template-columns:1fr 1fr; } }
+.field label { display:block; color:var(--muted); font-size:0.7rem; font-weight:700; margin-bottom:0.25rem; }
+.field input { width:100%; background:var(--panel2); border:1px solid var(--border); border-radius:9px; padding:0.5rem 0.7rem; color:var(--text); font-family:inherit; font-size:0.85rem; outline:none; }
+.field input:focus { border-color:var(--blue); }
+.picker { position:relative; }
+.picker .drop { position:absolute; top:110%; right:0; left:0; background:var(--panel); border:1px solid var(--border); border-radius:10px; display:none; z-index:99; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,.5); max-height:260px; overflow-y:auto; }
+.picker .drop a { display:flex; justify-content:space-between; padding:0.5rem 0.8rem; color:var(--text); font-size:0.82rem; border-bottom:1px solid rgba(31,45,69,.4); text-decoration:none; }
+.picker .drop a:hover { background:rgba(41,98,255,.1); }
+
+/* ===== جدول + قوائم ===== */
+.wl-item { display:flex; justify-content:space-between; align-items:center; gap:0.6rem; padding:0.65rem 0.8rem; background:var(--panel); border:1px solid var(--border); border-radius:10px; margin-bottom:0.5rem; }
+.wl-item .nm { color:var(--muted); font-size:0.7rem; }
+.wl-item .sym { color:#fff; font-weight:800; }
+.wl-item .sig { font-size:0.72rem; font-weight:800; }
+.pill { font-size:0.68rem; font-weight:800; padding:0.15rem 0.55rem; border-radius:20px; border:1px solid; }
+
+/* ===== حالات فارغة/تحميل/خطأ ===== */
+.empty { text-align:center; color:var(--muted); padding:2.5rem 1rem; border:1px dashed var(--border); border-radius:12px; }
+.error { color:var(--red); font-size:0.8rem; padding:0.5rem; background:rgba(255,61,87,.07); border-radius:8px; }
+.notice { font-size:0.72rem; color:var(--muted); line-height:1.6; }

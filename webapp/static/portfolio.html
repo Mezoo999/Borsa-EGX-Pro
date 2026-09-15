@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EGX Pro — محفظتي</title>
+<meta name="description" content="تتبع محفظتك من أسهم البورصة المصرية بربح وخسارة لحظي بأسعار TradingView.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="logo"><a href="/" style="color:white;text-decoration:none;">📈 EGX <span>Pro</span></a></div>
+  <div class="header-right">
+    <span class="status-chip" id="statusChip">...</span>
+    <span id="clock"></span>
+  </div>
+</header>
+<div id="nav" data-page="portfolio"></div>
+
+<div class="wrap">
+  <div class="page-head">
+    <h2>💼 محفظتي</h2>
+    <p>سجّل مراكزك كما هي في ثاندر وتابع ربحك/خسارتك لحظياً بأسعار TradingView — البيانات محفوظة على جهازك فقط.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:0.9rem;">
+    <h3>➕ تسجيل مركز جديد</h3>
+    <div class="form-row">
+      <div class="field picker">
+        <label>السهم</label>
+        <input id="symInput" placeholder="ابحث بالاسم أو الرمز..." autocomplete="off">
+        <div class="drop" id="symDrop"></div>
+      </div>
+      <div class="field"><label>عدد الأسهم</label><input id="sharesInput" type="number" min="1" step="1" value="100"></div>
+      <div class="field"><label>متوسط الشراء (ج.م)</label><input id="costInput" type="number" min="0.01" step="0.01" placeholder="مثال 120.50"></div>
+      <button id="addBtn" class="btn-primary">💾 تسجيل</button>
+    </div>
+    <div class="notice" id="addMsg"></div>
+  </div>
+
+  <div class="sum-grid" id="sumGrid"></div>
+  <div id="list"></div>
+  <div class="caption" style="margin-top:0.8rem;">الأسعار من TradingView (متأخرة ~15 دقيقة) — استرشادي وليس نصيحة استثمارية</div>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/portfolio.js"></script>
+</body>
+</html>

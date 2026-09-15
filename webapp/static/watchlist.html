@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EGX Pro — المتابعة والتنبيهات</title>
+<meta name="description" content="قائمة متابعة أسهمك وتنبيهات سعرية لحظية مع إشعارات خارجية.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <div class="logo"><a href="/" style="color:white;text-decoration:none;">📈 EGX <span>Pro</span></a></div>
+  <div class="header-right">
+    <span class="status-chip" id="statusChip">...</span>
+    <span id="clock"></span>
+  </div>
+</header>
+<div id="nav" data-page="watchlist"></div>
+
+<div class="wrap">
+  <div class="page-head">
+    <h2>⭐ المتابعة والتنبيهات السعرية</h2>
+    <p>تابع أسهمك لحظياً واضبط تنبيهات سعرية تصل إليك عبر تيليجرام أو Webhook عند الوصول للمستوى المطلوب.</p>
+  </div>
+
+  <div class="grid-2" style="margin-top:0.5rem;">
+    <div class="card">
+      <h3>📌 قائمة المتابعة</h3>
+      <div class="form-row" style="grid-template-columns:1fr auto;">
+        <div class="field picker">
+          <input id="wlInput" placeholder="ابحث عن سهم لإضافته..." autocomplete="off">
+          <div class="drop" id="wlDrop"></div>
+        </div>
+        <button id="wlAdd" class="btn-primary">➕ إضافة</button>
+      </div>
+      <div id="wlList"></div>
+    </div>
+
+    <div class="card">
+      <h3>🔔 تنبيهات سعرية</h3>
+      <div class="form-row" style="grid-template-columns:1.4fr 1fr 1fr auto;">
+        <div class="field picker">
+          <input id="alInput" placeholder="السهم..." autocomplete="off">
+          <div class="drop" id="alDrop"></div>
+        </div>
+        <div class="field"><label>⬆️ فوق</label><input id="alAbove" type="number" min="0" step="0.01" placeholder="سعر"></div>
+        <div class="field"><label>⬇️ تحت</label><input id="alBelow" type="number" min="0" step="0.01" placeholder="سعر"></div>
+        <button id="alAdd" class="btn-primary">حفظ</button>
+      </div>
+      <div id="alList"></div>
+      <div class="notice" style="margin-top:0.6rem;">🔔 الإشعارات تصل عبر تيليجرام أو Webhook (يُضبَط بمتغيرات البيئة) — وإلا تُسجّل محلياً. راجع README.</div>
+    </div>
+  </div>
+  <div class="caption" style="margin-top:0.8rem;">الأسعار من TradingView (متأخرة ~15 دقيقة) — استرشادي وليس نصيحة استثمارية</div>
+</div>
+
+<script src="/static/common.js"></script>
+<script src="/static/watchlist.js"></script>
+</body>
+</html>
