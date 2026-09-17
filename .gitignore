@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 user_store.json
 streamlit.log
+
+_st.log
+_st_err.log
