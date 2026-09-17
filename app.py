@@ -375,12 +375,33 @@ if status["open"]:
 else:
     status_html = f'<span class="closed-badge">● السوق مغلق — {status["reason"]}</span>'
 
+# جرس الإشعارات: عدّ التنبيهات المفعّلة حالياً
+_alert_count = 0
+_alert_hits = []
+try:
+    _snap_h = tvd.snapshot()
+    for _s, _a in (USER_STORE.get("alerts", {}) or {}).items():
+        _r = _snap_h.get(_s.replace(".CA", ""))
+        if not _r:
+            continue
+        _p = _r["close"]
+        if ((_a.get("above") and _p >= _a["above"]) or (_a.get("below") and _p <= _a["below"])):
+            _alert_count += 1
+            _alert_hits.append(f"{_s.replace('.CA','')} ({_p:,.2f})")
+except Exception:
+    pass
+_alert_tip = ("تنبيهات مفعّلة الآن: " + "، ".join(_alert_hits)) if _alert_hits else "لا تنبيهات مفعّلة"
+
 st.markdown(f"""
 <div class="pro-header">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.6rem;">
         <div>
             <h1>📈 منصة البورصة المصرية — Trading Terminal</h1>
             <p>أسعار لحظية من TradingView • {len(symbol_registry())} سهم حقيقي • توصيات ذكية • تحليل احترافي مجاني 100%</p>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.6rem;">
+            <span title="{_alert_tip}" style="background:rgba(255,255,255,0.07); border:1px solid {'#ffab00' if _alert_count else '#2a3b5c'}; border-radius:10px; padding:0.35rem 0.75rem; font-size:0.85rem; font-weight:800; color:{'#ffab00' if _alert_count else '#7d8db1'};">🔔 {_alert_count if _alert_count else ''}</span>
+            {status_html}
         </div>
     </div>
 </div>
@@ -649,8 +670,10 @@ with st.sidebar:
 # ============================================================
 # التبويبات
 # ============================================================
-tab_market, tab_portfolio, tab_advisor, tab_detail, tab_watch, tab_tools = st.tabs(
-    ["🏠 السوق", "💼 محفظتي", "💡 الفرص", "🎯 التداول والقرار", "⭐ المتابعة والصفقات", "🧪 أدوات"]
+(tab_market, tab_advisor, tab_detail, tab_theories, tab_time,
+ tab_portfolio, tab_watch, tab_learn, tab_tools) = st.tabs(
+    ["🏠 السوق", "💡 الفرص", "🎯 التداول والقرار", "🔬 النظريات", "🧠 التحليل الزمني",
+     "💼 محفظتي", "⭐ المتابعة والصفقات", "🎓 التعلّم", "🧪 أدوات"]
 )
 
 # ============================================================
@@ -2068,6 +2091,110 @@ with tab_tools:
 ملاحظة مهنية: أسهم هذه الشركات تتأثر بأداء قطاع إدارة الأصول ككل، لكنها **ليست** بديلاً مباشراً لأداء الصناديق نفسها.
                 """)
         st.caption("🔒 لا تقدم هذه المنصة توصيات بشأن صناديق الاكتتاب — راجع نشرة الصندوق وموقع الهيئة العامة للرقابة المالية قبل أي استثمار")
+
+# ============================================================
+# TAB: النظريات (Dow / Elliott / Fibonacci)
+# ============================================================
+with tab_theories:
+    st.subheader("🔬 نظريات التحليل الفني")
+    st.caption("نظريات داو وإليوت وفيبوناتشي محسوبة على السهم الحالي — استرشادية وتكمّل بقية التحليل.")
+    _th_df = cached_single(symbol, "1y")
+    if _th_df is None or _th_df.empty or len(_th_df) < 60:
+        st.error("تعذر تحميل بيانات كافية لهذا السهم.")
+    else:
+        from modules.theories import dow_analysis, elliott_analysis, fibonacci_levels
+        _dow = dow_analysis(_th_df)
+        _el = elliott_analysis(_th_df)
+        _fib = fibonacci_levels(_th_df)
+        _dcolor = {"bullish": "#00c853", "bearish": "#ff5c76", "neutral": "#90a4ae"}.get(_dow.get("status"), "#90a4ae")
+        st.markdown(f"""
+        <div class="pick-card" style="border-color:{_dcolor};">
+            <div style="color:#90caf9;font-size:0.8rem;font-weight:800;">📐 نظرية داو (Dow Theory)</div>
+            <div style="color:{_dcolor};font-size:1.3rem;font-weight:900;margin:0.3rem 0;">{_dow.get('trend')}</div>
+            <div style="color:#e0e0e0;font-size:0.85rem;">{_dow.get('advice')}</div>
+            <div style="color:#7d8db1;font-size:0.72rem;margin-top:0.4rem;">آخر قمة {_dow.get('last_high')} • آخر قاع {_dow.get('last_lows')} • السعر {_dow.get('close')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("")
+        st.markdown(f"""
+        <div class="pick-card">
+            <div style="color:#90caf9;font-size:0.8rem;font-weight:800;">🌊 موجات إليوت (Elliott Wave)</div>
+            <div style="color:white;font-size:1.1rem;font-weight:800;margin:0.3rem 0;">{_el.get('label')}</div>
+            <div style="color:#e0e0e0;font-size:0.85rem;">{_el.get('note')}</div>
+            <div style="color:#7d8db1;font-size:0.72rem;margin-top:0.4rem;">موضع السعر في الموجة: {_el.get('position_in_wave')}% — {_el.get('disclaimer','')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("")
+        if "levels" in _fib:
+            st.markdown("##### 📊 مستويات فيبوناتشي (ارتداد)")
+            _frows = [{"المستوى": k, "السعر": v} for k, v in _fib["levels"].items()]
+            st.dataframe(pd.DataFrame(_frows), hide_index=True, width="stretch",
+                         column_config={"السعر": st.column_config.NumberColumn(format="%.2f")})
+            st.caption(f"من قمة {_fib['swing_high']} إلى قاع {_fib['swing_low']} — مناطق ارتداد ودخول شائعة.")
+
+# ============================================================
+# TAB: التحليل الزمني
+# ============================================================
+with tab_time:
+    st.subheader("🧠 التحليل الزمني — أنماط التوقيت التاريخية")
+    st.caption("أرقام حقيقية من تاريخ السهم: أي أيام وشهور أفضل تاريخياً. مساعدة للسياق وليست ضماناً.")
+    _tm_df = cached_single(symbol, "2y")
+    if _tm_df is None or _tm_df.empty or len(_tm_df) < 30:
+        st.error("تعذر تحميل بيانات كافية.")
+    else:
+        from modules.time_analysis import day_of_week_stats, monthly_stats, summary
+        _tsum = summary(_tm_df)
+        if _tsum:
+            _c1, _c2, _c3, _c4 = st.columns(4)
+            _c1.metric("إجمالي الجلسات", _tsum.get("إجمالي الجلسات"))
+            _c2.metric("نسبة الأيام الرابحة", f"{_tsum.get('نسبة الأيام الرابحة %')}%")
+            _c3.metric("متوسط العائد اليومي", f"{_tsum.get('متوسط العائد اليومي %')}%")
+            _c4.metric("رابحة/خاسرة", f"{_tsum.get('أيام رابحة')}/{_tsum.get('أيام خاسرة')}")
+        _dw = day_of_week_stats(_tm_df)
+        if not _dw.empty:
+            st.markdown("##### 📅 أداء أيام الأسبوع (الأحد–الخميس)")
+            st.dataframe(_dw, hide_index=True, width="stretch", column_config={
+                "متوسط العائد %": st.column_config.NumberColumn(format="%+.2f%%"),
+                "نسبة الأيام الرابحة %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%"),
+            })
+        _mo = monthly_stats(_tm_df)
+        if not _mo.empty:
+            st.markdown("##### 🗓️ الموسمية الشهرية")
+            st.dataframe(_mo, hide_index=True, width="stretch", column_config={
+                "متوسط العائد %": st.column_config.NumberColumn(format="%+.2f%%"),
+                "نسبة الأيام الرابحة %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%"),
+            })
+        st.caption("⚠️ الأنماط الزمنية مساعدة للسياق — لا تعتمد عليها وحدها في قرار الدخول.")
+
+# ============================================================
+# TAB: التعلّم
+# ============================================================
+with tab_learn:
+    st.subheader("🎓 مركز التعلّم")
+    st.caption("دليل مبسّط لفهم المنصة والمؤشرات والنظريات وإدارة المخاطر.")
+    with st.expander("📊 كيف تقرأ المؤشرات الفنية؟", expanded=True):
+        st.markdown("- **RSI**: فوق 70 تشبع شرائي (خطر) • تحت 30 تشبع بيعي (فرصة).\n"
+                    "- **MACD**: تقاطع الخط فوق الإشارة = زخم صاعد.\n"
+                    "- **ADX**: فوق 25 = اتجاه قوي.\n"
+                    "- **Bollinger**: السعر عند الحافة السفلية = احتمال ارتداد.\n"
+                    "- **OBV**: تراكم صاعد = سيولة تدعم الاتجاه.\n"
+                    "- **MFI**: مؤشر سيولة (مثل RSI لكن مرجّح بالحجم).")
+    with st.expander("🧠 التحليل الزمني — إمتى تتداول؟"):
+        st.markdown("دراسة أداء أيام الأسبوع والشهور تاريخياً تساعدك تختار توقيت الدخول. "
+                    "مثلاً لو يوم معيّن أعلى نسبة أيام رابحة تاريخياً لسهمك، فقدّم الشراء فيه. "
+                    "(تبويب «التحليل الزمني» يعرضها تلقائياً لسهمك.)")
+    with st.expander("🔬 النظريات — داو وإليوت وفيبوناتشي"):
+        st.markdown("- **داو**: الاتجاه صاعد لما السعر يعمل قمم وقيعان أعلى، وهابط بالعكس.\n"
+                    "- **إليوت**: الحركة على 5 موجات دفع + 3 تصحيح (استرشادية).\n"
+                    "- **فيبوناتشي**: مستويات 38.2% / 50% / 61.8% مناطق ارتداد ودخول شائعة.")
+    with st.expander("🛡️ إدارة المخاطر (الأهم على الإطلاق)"):
+        st.markdown("- لا تخاطر بأكثر من **1–2%** من رأس مالك في الصفقة الواحدة.\n"
+                    "- استخدم **وقف خسارة** دائماً — بلا استثناء.\n"
+                    "- استهدف عائداً لمخاطرة **1:2** على الأقل.\n"
+                    "- نوّع: لا تركّز كل رأس المال في سهم أو قطاع واحد.")
+    with st.expander("🎯 الفرصة الحقيقية = توافق (Confluence)"):
+        st.markdown("لا تدخل بإشارة واحدة. انتظر توافق عدة أبعاد مستقلة: اتجاه + زخم + حجم + نموذج + "
+                    "عائد/مخاطرة جيد + سيولة + مالي سليم. تبويب «التداول والقرار» يعرض «درجة التوافق» تلقائياً لكل سهم.")
 
 # ============================================================
 # Footer

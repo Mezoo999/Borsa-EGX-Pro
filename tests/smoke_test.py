@@ -132,6 +132,22 @@ def t_signal_series():
     assert not (d["sig_buy"] & d["sig_sell"]).any()
 
 
+def t_theories():
+    from modules.theories import dow_analysis, elliott_analysis, fibonacci_levels
+    d = _synth(200)
+    assert "trend" in dow_analysis(d) or "error" in dow_analysis(d)
+    assert "label" in elliott_analysis(d)
+    assert "levels" in fibonacci_levels(d)
+
+
+def t_time_analysis():
+    from modules.time_analysis import day_of_week_stats, monthly_stats, summary
+    d = _synth(400)
+    assert not day_of_week_stats(d).empty
+    assert not monthly_stats(d).empty
+    assert "نسبة الأيام الرابحة %" in summary(d)
+
+
 def t_confluence():
     from modules.confluence import analyze_confluence
     r = analyze_confluence("TEST.CA", _synth(200), info={})
@@ -154,6 +170,8 @@ check("notify fallback", t_notify_fallback)
 check("notify enabled", t_notify_enabled_false)
 check("signal series", t_signal_series)
 check("confluence", t_confluence)
+check("theories", t_theories)
+check("time analysis", t_time_analysis)
 
 print("")
 print("=" * 50)
