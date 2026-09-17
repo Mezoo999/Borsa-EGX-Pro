@@ -132,6 +132,30 @@ def t_signal_series():
     assert not (d["sig_buy"] & d["sig_sell"]).any()
 
 
+def t_indicators_ext():
+    from modules.technical import add_indicators
+    from modules.indicators_ext import add_advanced, ichimoku_signal, pivot_points
+    d = add_advanced(add_indicators(_synth(200)))
+    assert all(c in d.columns for c in ["ICH_Tenkan", "KC_Upper", "DC_Upper", "Aroon_Up", "UO", "CMF", "Squeeze"])
+    assert ichimoku_signal(d)["status"] in ("bullish", "bearish", "neutral", "unclear")
+    assert "classic" in pivot_points(_synth(50))
+
+
+def t_structure():
+    from modules.structure import analyze_structure, sr_zones
+    r = analyze_structure(_synth(200))
+    assert "trend" in r and "bos" in r
+    assert isinstance(sr_zones(_synth(200)), list)
+
+
+def t_time_extended():
+    from modules.time_analysis import run_lengths, dominant_cycle, quarterly_stats, monthly_heatmap
+    d = _synth(400)
+    assert "avg_up_run" in run_lengths(d)
+    assert "dominant_period" in dominant_cycle(d, max_lag=40)
+    assert not quarterly_stats(d).empty
+
+
 def t_sentiment():
     from modules.sentiment import score_text, analyze_news
     assert score_text("أرباح ونمو وارتفاع")[0] == "إيجابي"
@@ -235,6 +259,9 @@ check("sentiment", t_sentiment)
 check("patterns", t_patterns)
 check("peer compare", t_peer_compare)
 check("events", t_events)
+check("indicators ext", t_indicators_ext)
+check("structure", t_structure)
+check("time extended", t_time_extended)
 
 print("")
 print("=" * 50)

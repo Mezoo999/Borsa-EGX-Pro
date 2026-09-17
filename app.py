@@ -2229,6 +2229,51 @@ with tab_theories:
                          column_config={"السعر": st.column_config.NumberColumn(format="%.2f")})
             st.caption(f"من قمة {_fib['swing_high']} إلى قاع {_fib['swing_low']} — مناطق ارتداد ودخول شائعة.")
 
+        # Ichimoku
+        st.markdown("")
+        st.markdown("##### ☁️ Ichimoku Kinko Hyo")
+        try:
+            from modules.indicators_ext import add_advanced as _add_adv, ichimoku_signal as _ich_sig, pivot_points as _piv
+            _adv = _add_adv(add_indicators(_th_df))
+            _ich = _ich_sig(_adv)
+            _map = {"bullish": ("صاعد", "#00c853"), "bearish": ("هابط", "#ff5c76"),
+                    "neutral": ("محايد", "#90a4ae"), "unclear": ("غير واضح", "#90a4ae")}
+            _lbl, _ic = _map.get(_ich.get("status"), ("محايد", "#90a4ae"))
+            st.markdown(f'<div class="pick-card" style="border-color:{_ic};"><div style="color:{_ic};font-weight:800;font-size:1.1rem;">{_lbl}</div><ul style="margin-top:0.4rem;">' + "".join(f"<li>{_s}</li>" for _s in _ich.get("signals", [])) + "</ul></div>", unsafe_allow_html=True)
+        except Exception:
+            st.caption("تعذر حساب Ichimoku الآن.")
+
+        # هيكل السوق
+        st.markdown("##### 🏗️ هيكل السوق (BOS / CHoCH — مفاهيم الصناديق)")
+        try:
+            from modules.structure import analyze_structure as _an_struct, sr_zones as _sr_zones
+            _stx = _an_struct(_th_df)
+            if not _stx.get("error"):
+                _bos = {"bullish": "كسر صاعد", "bearish": "كسر هابط", None: "لا يوجد"}.get(_stx.get("bos"), "—")
+                _choch = {"bullish": "انعكاس صاعد", "bearish": "انعكاس هابط", None: "لا يوجد"}.get(_stx.get("choch"), "—")
+                st.markdown(f'<div class="pick-card"><div>الاتجاه الهيكلي: <b>{_stx.get("trend")}</b> <span style="color:#7d8db1;">({_stx.get("last_high_label")} / {_stx.get("last_low_label")})</span></div><div style="font-size:0.82rem;margin-top:0.3rem;">كسر الهيكل (BOS): <b>{_bos}</b> • تغيّر الشخصية (CHoCH): <b>{_choch}</b></div><div style="font-size:0.72rem;color:#7d8db1;margin-top:0.2rem;">آخر قمة {_stx.get("last_swing_high")} • آخر قاع {_stx.get("last_swing_low")}</div></div>', unsafe_allow_html=True)
+            _zones = _sr_zones(_th_df)
+            if _zones:
+                st.markdown("##### 📍 مناطق الدعم/المقاومة (من تجميع القمم والقيعان)")
+                st.dataframe(pd.DataFrame(_zones), hide_index=True, width="stretch",
+                    column_config={"distance_pct": st.column_config.NumberColumn("البعد%", format="%+.2f%%")})
+        except Exception:
+            st.caption("تعذر تحليل هيكل السوق الآن.")
+
+        # نقاط البيفوت
+        st.markdown("##### 🧮 نقاط البيفوت (Classic / Camarilla)")
+        try:
+            _pv = _piv(_th_df)
+            _pc1, _pc2 = st.columns(2)
+            with _pc1:
+                st.markdown("**Classic**")
+                st.dataframe(pd.DataFrame([{"المستوى": k, "السعر": v} for k, v in _pv.get("classic", {}).items()]), hide_index=True, width="stretch")
+            with _pc2:
+                st.markdown("**Camarilla**")
+                st.dataframe(pd.DataFrame([{"المستوى": k, "السعر": v} for k, v in _pv.get("camarilla", {}).items()]), hide_index=True, width="stretch")
+        except Exception:
+            st.caption("تعذر حساب نقاط البيفوت الآن.")
+
 # ============================================================
 # TAB: التحليل الزمني
 # ============================================================
@@ -2239,7 +2284,8 @@ with tab_time:
     if _tm_df is None or _tm_df.empty or len(_tm_df) < 30:
         st.error("تعذر تحميل بيانات كافية.")
     else:
-        from modules.time_analysis import day_of_week_stats, monthly_stats, summary
+        from modules.time_analysis import (day_of_week_stats, monthly_stats, summary,
+                                            run_lengths, dominant_cycle, quarterly_stats, monthly_heatmap)
         _tsum = summary(_tm_df)
         if _tsum:
             _c1, _c2, _c3, _c4 = st.columns(4)
@@ -2261,6 +2307,32 @@ with tab_time:
                 "متوسط العائد %": st.column_config.NumberColumn(format="%+.2f%%"),
                 "نسبة الأيام الرابحة %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%"),
             })
+        _q = quarterly_stats(_tm_df)
+        if not _q.empty:
+            st.markdown("##### 🧭 الموسمية الربع سنوية")
+            st.dataframe(_q, hide_index=True, width="stretch", column_config={
+                "متوسط العائد %": st.column_config.NumberColumn(format="%+.2f%%"),
+                "نسبة الأيام الرابحة %": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f%%"),
+            })
+        _rl = run_lengths(_tm_df)
+        if _rl:
+            st.markdown("##### 🔁 مدد الموجات (متوسط عدد الأيام المتتالية)")
+            _rc1, _rc2, _rc3, _rc4 = st.columns(4)
+            _rc1.metric("متوسط موجة صعود", _rl.get("avg_up_run"))
+            _rc2.metric("متوسط موجة هبوط", _rl.get("avg_down_run"))
+            _rc3.metric("أطول صعود", _rl.get("max_up_run"))
+            _rc4.metric("أطول هبوط", _rl.get("max_down_run"))
+        _cy = dominant_cycle(_tm_df)
+        if _cy:
+            st.markdown("##### 🔄 الدورة السائدة")
+            if _cy.get("dominant_period"):
+                st.info(f"دورة تقريبية كل ~{_cy['dominant_period']} جلسة (ارتباط {_cy['correlation']}) — {_cy.get('note','')}")
+            else:
+                st.caption(_cy.get("note", "لا دورة واضحة (العوائد شبه عشوائية)."))
+        _hm = monthly_heatmap(_tm_df)
+        if not _hm.empty:
+            st.markdown("##### 🌡️ خريطة الأداء الزمني (سنوات × شهور) — متوسط العائد %")
+            st.dataframe(_hm, width="stretch")
         st.caption("⚠️ الأنماط الزمنية مساعدة للسياق — لا تعتمد عليها وحدها في قرار الدخول.")
 
 # ============================================================

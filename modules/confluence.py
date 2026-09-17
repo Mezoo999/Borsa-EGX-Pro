@@ -11,6 +11,8 @@ from modules.technical import add_indicators, get_last_signals
 from modules.signals import generate_signal, calculate_price_targets
 from modules.expert_advisor import analyze_wyckoff_phase, analyze_weekly_confluence
 from modules.fundamental import analyze_fundamental
+from modules.indicators_ext import add_advanced, ichimoku_signal
+from modules.structure import analyze_structure
 
 
 def _weekly_trend(df_weekly):
@@ -43,6 +45,7 @@ def analyze_confluence(symbol: str, df_daily: pd.DataFrame,
         return {"error": "بيانات غير كافية"}
 
     df_ind = add_indicators(df_daily)
+    df_adv = add_advanced(df_ind)  # Ichimoku / Keltner / Donchian / Squeeze ...
     sig = get_last_signals(df_ind)
     close = float(sig.get("Close", df_daily["Close"].iloc[-1]))
     swing = generate_signal(sig, df_ind)
@@ -149,18 +152,60 @@ def analyze_confluence(symbol: str, df_daily: pd.DataFrame,
     except Exception:
         factors.append({"group": "المالي", "name": "الجدارة المالية", "status": 0, "note": "غير متاحة"})
 
+    # 11) Ichimoku
+    try:
+        _ich = ichimoku_signal(df_adv)
+        _s = 1 if _ich["status"] == "bullish" else (-1 if _ich["status"] == "bearish" else 0)
+        factors.append({"group": "الاتجاه", "name": "Ichimoku",
+                        "status": _s, "note": (_ich["signals"][0] if _ich["signals"] else "سحابة محايدة")})
+    except Exception:
+        pass
+
+    # 12) هيكل السوق (BOS / CHoCH)
+    try:
+        _stx = analyze_structure(df_daily)
+        if not _stx.get("error"):
+            if _stx.get("bos") == "bullish" or "صاعد" in _stx.get("trend", ""):
+                _s = 1
+                _note = _stx["trend"] + (" • كسر هيكل صاعد" if _stx.get("bos") == "bullish" else "")
+            elif _stx.get("bos") == "bearish" or "هابط" in _stx.get("trend", ""):
+                _s = -1
+                _note = _stx["trend"] + (" • كسر هيكل هابط" if _stx.get("bos") == "bearish" else "")
+            else:
+                _s, _note = 0, _stx["trend"]
+            if _stx.get("choch") == "bullish":
+                _s, _note = 1, _note + " • تغيّر شخصية صاعد (CHoCH)"
+            elif _stx.get("choch") == "bearish":
+                _s, _note = -1, _note + " • تغيّر شخصية هابط (CHoCH)"
+            factors.append({"group": "النموذج", "name": "هيكل السوق", "status": _s, "note": _note})
+    except Exception:
+        pass
+
+    # 13) نظام ADX (قوة الاتجاه واتجاهه)
+    _adx = sig.get("ADX")
+    _sma50 = sig.get("SMA50")
+    if _adx is not None and _sma50 and close:
+        if _adx >= 25 and close > _sma50:
+            factors.append({"group": "الزخم", "name": "نظام ADX", "status": 1, "note": f"اتجاه صاعد قوي (ADX {_adx:.0f})"})
+        elif _adx >= 25 and close < _sma50:
+            factors.append({"group": "الزخم", "name": "نظام ADX", "status": -1, "note": f"اتجاه هابط قوي (ADX {_adx:.0f})"})
+        else:
+            factors.append({"group": "الزخم", "name": "نظام ADX", "status": 0, "note": f"اتجاه ضعيف/عرضي (ADX {_adx:.0f})"})
+
     total = len(factors)
     pos = sum(1 for f in factors if f["status"] == 1)
     neg = sum(1 for f in factors if f["status"] == -1)
     conviction = max(0, min(100, round(50 + (pos - neg) / total * 50)))
 
-    if pos >= 5 and neg <= 1 and conviction >= 70:
+    _posr = pos / total if total else 0
+    _negr = neg / total if total else 0
+    if _posr >= 0.5 and neg <= 1 and conviction >= 70:
         verdict, color = "شراء قوي — توافق عالٍ", "#00c853"
-    elif pos >= 4 and (pos - neg) >= 3 and conviction >= 58:
+    elif _posr >= 0.42 and (pos - neg) >= total * 0.25 and conviction >= 58:
         verdict, color = "شراء — توافق جيد", "#66bb6a"
-    elif neg >= 4 and (neg - pos) >= 2:
+    elif _negr >= 0.45 and (neg - pos) >= total * 0.2:
         verdict, color = "بيع / تجنّب — توافق هابط", "#e53935"
-    elif neg >= 3:
+    elif _negr >= 0.35:
         verdict, color = "حذر — ضعف التوافق", "#ffab00"
     else:
         verdict, color = "محايد — لا توافق كافٍ (انتظار)", "#90a4ae"
