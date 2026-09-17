@@ -132,6 +132,15 @@ def t_signal_series():
     assert not (d["sig_buy"] & d["sig_sell"]).any()
 
 
+def t_confluence():
+    from modules.confluence import analyze_confluence
+    r = analyze_confluence("TEST.CA", _synth(200), info={})
+    assert "conviction" in r and 0 <= r["conviction"] <= 100
+    assert "verdict" in r and "color" in r
+    assert "factors" in r and len(r["factors"]) >= 8
+    assert r["pos"] + r["neg"] <= r["total"]
+
+
 check("technical", t_technical)
 check("indicator bounds", t_indicator_bounds)
 check("signals", t_signals)
@@ -144,6 +153,7 @@ check("backtest threshold", t_backtest_threshold)
 check("notify fallback", t_notify_fallback)
 check("notify enabled", t_notify_enabled_false)
 check("signal series", t_signal_series)
+check("confluence", t_confluence)
 
 print("")
 print("=" * 50)

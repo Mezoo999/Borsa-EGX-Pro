@@ -40,6 +40,7 @@ import modules.tv_widgets as tv
 import modules.news as newsfeed
 import modules.macro as macro
 import modules.charts as charts
+import modules.confluence as confluence_engine
 
 # ============================================================
 # إعداد الصفحة
@@ -1257,6 +1258,13 @@ with tab_detail:
         tech_score = calculate_technical_score(last_signals, df_ind)
         price_targets = calculate_price_targets(last_signals, df_ind)
 
+        # محرك التقاء الإشارات (Confluence) — توصية فقط عند توافق شروط مستقلة
+        try:
+            df_weekly = cached_single(symbol, "1y", "1wk")
+        except Exception:
+            df_weekly = None
+        confluence = confluence_engine.analyze_confluence(symbol, df, df_weekly, info=info)
+
         # المستشار الاستثماري وخبير البورصة المصرية
         expert = generate_expert_verdict(symbol, df)
         v_action = expert.get("verdict", signal["action"])
@@ -1359,6 +1367,28 @@ with tab_detail:
             </div>
         </div>
         """, unsafe_allow_html=True)
+
+        # ===== محرك التقاء الإشارات (Confluence) =====
+        st.markdown("#### 🎯 محرك التقاء الإشارات — متى تكون الفرصة حقيقية")
+        _conv = confluence.get("conviction", 50)
+        _ccolor = confluence.get("color", "#90a4ae")
+        st.markdown(f"""
+        <div style="background:linear-gradient(135deg,#0d1624,#101d32);border:2px solid {_ccolor};border-radius:14px;padding:1rem 1.2rem;margin:0.6rem 0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.6rem;">
+                <div style="font-size:0.8rem;color:#90caf9;font-weight:800;">🎯 درجة التوافق (Confluence)</div>
+                <div style="font-size:1.9rem;font-weight:900;color:{_ccolor};">{_conv}<span style="font-size:0.8rem;color:#7d8db1;">/100</span></div>
+            </div>
+            <div style="height:8px;border-radius:4px;background:linear-gradient(90deg,#ff3d57,#ffab00,#00e676);position:relative;margin:0.5rem 0;">
+                <div style="position:absolute;left:{_conv}%;top:-4px;width:14px;height:16px;background:#fff;border-radius:3px;transform:translateX(-50%);"></div>
+            </div>
+            <div style="font-size:1.15rem;font-weight:800;color:{_ccolor};">{confluence['verdict']}</div>
+            <div style="color:#7d8db1;font-size:0.7rem;">{confluence['pos']} صاعد • {confluence['neg']} هابط • من {confluence['total']} شروط مستقلة — التوصية لا تُطلق إلا عند التوافق</div>
+        </div>
+        """, unsafe_allow_html=True)
+        for _f in confluence.get("factors", []):
+            _icon = "✅" if _f["status"] == 1 else ("❌" if _f["status"] == -1 else "➖")
+            st.markdown(f'<div style="display:flex;justify-content:space-between;padding:0.22rem 0;border-bottom:1px solid rgba(31,45,69,.4);font-size:0.8rem;"><span style="color:#e0e0e0;">{_icon} <b>{_f["name"]}</b> <span style="color:#7d8db1;">({_f["group"]})</span></span><span style="color:#7d8db1;">{_f["note"]}</span></div>', unsafe_allow_html=True)
+        st.caption("💡 لو درجة التوافق أقل من 60، الأفضل الانتظار — الفرصة الحقيقية = توافق عدة أبعاد مستقلة، وليست إشارة واحدة.")
 
         # ===== الرسم المباشر الاحترافي — محرك TradingView (نفس محرك ثاندر والمنصات العالمية) =====
         st.markdown("#### 📊 الرسم المباشر التفاعلي")

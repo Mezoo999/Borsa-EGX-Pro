@@ -3,9 +3,12 @@ from .data import get_ticker_info
 from .egx_fundamentals import get_curated_fundamentals, calculate_fundamental_health_score
 
 
-def analyze_fundamental(symbol: str) -> dict:
-    """جمع وتحليل البيانات الأساسية للشركة مع دمج البيانات المرجعية المصرية."""
-    info = get_ticker_info(symbol) or {}
+def analyze_fundamental(symbol: str, info: dict | None = None) -> dict:
+    """جمع وتحليل البيانات الأساسية للشركة مع دمج البيانات المرجعية المصرية.
+
+    info: بيانات yfinance جاهزة (اختياري) — لتجنّب طلب شبكة إضافي عند توفرها.
+    """
+    info = info if info is not None else (get_ticker_info(symbol) or {})
     curated = get_curated_fundamentals(symbol)
 
     def val(key, default=None):
