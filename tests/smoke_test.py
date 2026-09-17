@@ -132,6 +132,39 @@ def t_signal_series():
     assert not (d["sig_buy"] & d["sig_sell"]).any()
 
 
+def t_sentiment():
+    from modules.sentiment import score_text, analyze_news
+    assert score_text("أرباح ونمو وارتفاع")[0] == "إيجابي"
+    assert score_text("خسائر وتراجع")[0] == "سلبي"
+    assert analyze_news([{"title": "أرباح قوية"}])["overall"] == "إيجابية"
+
+
+def t_patterns():
+    from modules.patterns import pattern_series, recent_patterns
+    d = pattern_series(_synth(120))
+    assert "pat_bull" in d.columns and "pat_bear" in d.columns
+    assert isinstance(recent_patterns(_synth(120)), list)
+
+
+def t_peer_compare():
+    from modules.peer_compare import compare
+    db = {"A.CA": {"pe_ref": 5, "roe": 0.2}, "B.CA": {"pe_ref": 9, "roe": 0.1}}
+    r = compare("A.CA", lambda s: "بنوك", db)
+    assert not r.get("error") and len(r["rows"]) == 5
+    assert compare("Z.CA", lambda s: "x", db).get("error")
+
+
+def t_events():
+    import pandas as pd
+    from modules.events import get_events
+    class FakeT:
+        dividends = pd.Series([0.5, 0.7], index=pd.to_datetime(["2025-01-01", "2025-06-01"]))
+        splits = pd.Series([], dtype=float)
+        info = {"exDividendDate": 1780000000}
+    r = get_events("X.CA", ticker=FakeT())
+    assert len(r["dividends"]) == 2 and len(r["upcoming"]) >= 1
+
+
 def t_performance_track():
     from modules.performance_track import evaluate
     recs = [{"symbol": "A.CA", "entry": 100, "stop": 95, "t1": 110, "date": "2026-01-01"},
@@ -198,6 +231,10 @@ check("time analysis", t_time_analysis)
 check("performance track", t_performance_track)
 check("risk dashboard", t_risk_dashboard)
 check("report export", t_report_export)
+check("sentiment", t_sentiment)
+check("patterns", t_patterns)
+check("peer compare", t_peer_compare)
+check("events", t_events)
 
 print("")
 print("=" * 50)

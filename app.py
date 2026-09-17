@@ -41,6 +41,7 @@ import modules.news as newsfeed
 import modules.macro as macro
 import modules.charts as charts
 import modules.confluence as confluence_engine
+from modules.patterns import pattern_series, recent_patterns
 
 # ============================================================
 # إعداد الصفحة
@@ -753,6 +754,7 @@ with tab_market:
                     df_m.iloc[-1, df_m.columns.get_loc("Low")] = tv_live_m["close"]
             dfm = add_indicators(df_m)
             dfm = signal_series(dfm)  # أعمدة sig_buy/sig_sell لعلامات الشراء/البيع
+            dfm = pattern_series(dfm)  # أعمدة pat_bull/pat_bear لعلامات الأنماط
             # شموع + مؤشرات كاملة (EMA/Bollinger/Supertrend/VWMA20) + علامات شراء/بيع
             charts.lightweight_candles_pro(dfm, height=580, title=symbol)
             st.caption(f"📊 {symbol.replace('.CA','')} — آخر 6 أشهر: شموع + EMA9/21 + Bollinger + Supertrend + VWMA20 + علامات شراء/بيع (أخضر تحت = شراء، أحمر فوق = بيع)")
@@ -1447,6 +1449,62 @@ with tab_detail:
         except Exception:
             pass
 
+        # ===== الأنماط الشمعية المكتشفة =====
+        st.markdown("#### 🕯️ الأنماط الشمعية (آخر الجلسات)")
+        try:
+            _pats = recent_patterns(df_ind, lookback=60, limit=10)
+            if _pats:
+                for _p in _pats:
+                    _pc = "#00e676" if _p["type"] == "bullish" else ("#ff5c76" if _p["type"] == "bearish" else "#90a4ae")
+                    st.markdown(f'<div style="display:flex;justify-content:space-between;font-size:0.8rem;padding:0.2rem 0;border-bottom:1px solid rgba(31,45,69,.4);"><span style="color:{_pc};font-weight:700;">🕯️ {_p["pattern"]}</span><span style="color:#7d8db1;">{_p["date"]}</span></div>', unsafe_allow_html=True)
+            else:
+                st.caption("لا توجد أنماط شمعية واضحة في آخر الجلسات.")
+        except Exception:
+            st.caption("تعذر كشف الأنماط الآن.")
+
+        # ===== المقارنة الأساسية مع القطاع =====
+        st.markdown("#### 📊 المقارنة الأساسية مع القطاع")
+        try:
+            from modules.peer_compare import compare as _peer_cmp
+            from modules.egx_fundamentals import EGX_FUNDAMENTALS_DB as _FDB
+            _cmp = _peer_cmp(symbol, sector_of, _FDB)
+            if _cmp.get("error"):
+                st.caption(_cmp["error"])
+            else:
+                st.caption(f"القطاع: {_cmp['sector']} • شركات مرجعية للمقارنة: {_cmp['peers_count']}")
+                st.dataframe(pd.DataFrame(_cmp["rows"]), hide_index=True, width="stretch",
+                    column_config={"السهم": st.column_config.NumberColumn(format="%.3f"),
+                                   "متوسط القطاع": st.column_config.NumberColumn(format="%.3f"),
+                                   "متوسط السوق": st.column_config.NumberColumn(format="%.3f")})
+        except Exception:
+            st.caption("تعذر إجراء المقارنة الأساسية الآن.")
+
+        # ===== الأحداث والتوزيعات =====
+        st.markdown("#### 📅 الأحداث والتوزيعات")
+        try:
+            from modules.events import get_events as _get_events
+            _ev = _get_events(symbol)
+            _ec1, _ec2 = st.columns(2)
+            with _ec1:
+                st.markdown("**التوزيعات الأخيرة**")
+                if _ev["dividends"]:
+                    st.dataframe(pd.DataFrame(_ev["dividends"]), hide_index=True, width="stretch", height=190)
+                else:
+                    st.caption("لا توجد توزيعات مسجّلة.")
+            with _ec2:
+                st.markdown("**مواعيد قادمة وتجزئة**")
+                _any = False
+                for _u in _ev["upcoming"]:
+                    _any = True
+                    st.caption(f"• {_u['type']}: {_u['date']}")
+                for _sp in _ev["splits"]:
+                    _any = True
+                    st.caption(f"• تجزئة أسهم {_sp['date']}: {_sp['ratio']}")
+                if not _any:
+                    st.caption("لا توجد مواعيد معلنة.")
+        except Exception:
+            st.caption("تعذر تحميل الأحداث الآن.")
+
         # ===== الرسم المباشر الاحترافي — محرك TradingView (نفس محرك ثاندر والمنصات العالمية) =====
         st.markdown("#### 📊 الرسم المباشر التفاعلي")
         tv.render_tv(tv.tradingview_advanced_chart(f"EGX:{symbol.replace('.CA','')}", height=700), height=740)
@@ -1531,9 +1589,14 @@ with tab_detail:
             if not news_items:
                 st.caption("لا توجد أخبار حديثة متاحة لهذا السهم الآن")
             else:
-                for it in news_items:
-                    src_html = f' — <span style="color:#7d8db1;">{it["source"]}</span>' if it.get("source") else ""
-                    st.markdown(f'<div style="border-right:3px solid #2962ff; padding:0.4rem 0.7rem; margin-bottom:0.35rem; background:rgba(41,98,255,0.04); border-radius:6px;"><a href="{it["link"]}" target="_blank" style="color:#90caf9; text-decoration:none; font-size:0.85rem;">{it["title"]}</a><div style="color:#7d8db1; font-size:0.68rem; margin-top:0.15rem;">📅 {it["pub"]}{src_html}</div></div>', unsafe_allow_html=True)
+                from modules.sentiment import analyze_news as _analyze_news
+                _sent = _analyze_news(news_items)
+                _sc = "#00e676" if _sent["score"] > 0 else ("#ff5c76" if _sent["score"] < 0 else "#90a4ae")
+                st.markdown(f'<div style="font-size:0.82rem;margin-bottom:0.4rem;">🧭 معنويات العناوين: <b style="color:{_sc};">{_sent["overall"]}</b> (صافي {_sent["score"]:+d}) — تقدير آلي بالكلمات المفتاحية</div>', unsafe_allow_html=True)
+                for _it in _sent["rows"]:
+                    _icon = "🟢" if _it["score"] > 0 else ("🔴" if _it["score"] < 0 else "⚪")
+                    src_html = f' — <span style="color:#7d8db1;">{_it["source"]}</span>' if _it.get("source") else ""
+                    st.markdown(f'<div style="border-right:3px solid #2962ff; padding:0.4rem 0.7rem; margin-bottom:0.35rem; background:rgba(41,98,255,0.04); border-radius:6px;"><a href="{_it["link"]}" target="_blank" style="color:#90caf9; text-decoration:none; font-size:0.85rem;">{_icon} {_it["title"]}</a><div style="color:#7d8db1; font-size:0.68rem; margin-top:0.15rem;">📅 {_it["pub"]}{src_html}</div></div>', unsafe_allow_html=True)
             st.caption("⚠️ عناوين حقيقية من مصادر إخبارية عامة — راجع الإفصاح الرسمي للبورصة قبل أي قرار")
 
         st.markdown("---")

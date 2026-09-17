@@ -192,6 +192,13 @@ def lightweight_candles_pro(df: pd.DataFrame, height: int = 580, title: str = ""
         if show_signals and "sig_sell" in d.columns and bool(r.get("sig_sell", False)):
             markers.append({"time": t, "position": "aboveBar", "color": "#ff5c76",
                             "shape": "arrowDown", "text": "بيع"})
+        # علامات الأنماط الشمعية (دوائر) — إشارة إضافية مستقلة
+        if show_signals and "pat_bull" in d.columns and bool(r.get("pat_bull", False)):
+            markers.append({"time": t, "position": "belowBar", "color": "#26c6da",
+                            "shape": "circle", "text": "نمط"})
+        if show_signals and "pat_bear" in d.columns and bool(r.get("pat_bear", False)):
+            markers.append({"time": t, "position": "aboveBar", "color": "#ffa726",
+                            "shape": "circle", "text": "نمط"})
 
     j_candles = json.dumps(candles)
     j_volumes = json.dumps(volumes)
@@ -212,6 +219,8 @@ def lightweight_candles_pro(df: pd.DataFrame, height: int = 580, title: str = ""
       <span><i style="color:#ffd740;">╌</i> VWMA20</span>
       <span style="color:#00c853;">▲ شراء</span>
       <span style="color:#ff5c76;">▼ بيع</span>
+      <span style="color:#26c6da;">● نمط صاعد</span>
+      <span style="color:#ffa726;">● نمط هابط</span>
     </div>
     <div id="lw_chart" style="width:100%;height:{height}px;"></div>
     <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
