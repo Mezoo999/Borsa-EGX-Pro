@@ -670,10 +670,10 @@ with st.sidebar:
 # ============================================================
 # التبويبات
 # ============================================================
-(tab_market, tab_advisor, tab_detail, tab_theories, tab_time,
- tab_portfolio, tab_watch, tab_learn, tab_tools) = st.tabs(
-    ["🏠 السوق", "💡 الفرص", "🎯 التداول والقرار", "🔬 النظريات", "🧠 التحليل الزمني",
-     "💼 محفظتي", "⭐ المتابعة والصفقات", "🎓 التعلّم", "🧪 أدوات"]
+(tab_home, tab_market, tab_advisor, tab_detail, tab_theories, tab_time,
+ tab_portfolio, tab_perf, tab_risk, tab_watch, tab_learn, tab_tools) = st.tabs(
+    ["🏠 الرئيسية", "📊 السوق", "💡 الفرص", "🎯 التداول والقرار", "🔬 النظريات", "🧠 التحليل الزمني",
+     "💼 محفظتي", "📈 الأداء", "🛡️ المخاطر", "⭐ المتابعة والصفقات", "🎓 التعلّم", "🧪 أدوات"]
 )
 
 # ============================================================
@@ -1412,6 +1412,40 @@ with tab_detail:
             _icon = "✅" if _f["status"] == 1 else ("❌" if _f["status"] == -1 else "➖")
             st.markdown(f'<div style="display:flex;justify-content:space-between;padding:0.22rem 0;border-bottom:1px solid rgba(31,45,69,.4);font-size:0.8rem;"><span style="color:#e0e0e0;">{_icon} <b>{_f["name"]}</b> <span style="color:#7d8db1;">({_f["group"]})</span></span><span style="color:#7d8db1;">{_f["note"]}</span></div>', unsafe_allow_html=True)
         st.caption("💡 لو درجة التوافق أقل من 60، الأفضل الانتظار — الفرصة الحقيقية = توافق عدة أبعاد مستقلة، وليست إشارة واحدة.")
+
+        # ===== تنزيل تقرير التحليل (HTML قابل للطباعة PDF) =====
+        try:
+            from modules.report_export import render as _render_report
+            _rep_sections = [
+                {"title": "السعر والاتجاه", "items": [
+                    ("السعر الحالي", f"{last_close:,.2f}"),
+                    ("إشارة المحرك", str(v_action)),
+                    ("الدرجة الفنية", f"{tech_score['score']}/100"),
+                    ("مرحلة وايكوف", str(wyckoff.get('tag', ''))),
+                ]},
+                {"title": "درجة التوافق (Confluence)", "items": [
+                    ("درجة التوافق", f"{confluence.get('conviction')}/100"),
+                    ("الحكم", str(confluence.get('verdict'))),
+                    ("عوامل صاعدة/هابطة", f"{confluence.get('pos')} / {confluence.get('neg')}"),
+                ]},
+                {"title": "خطة التنفيذ", "items": [
+                    ("منطقة الشراء", str(plan.get('buy_zone', ''))),
+                    ("وقف الخسارة", f"{float(plan.get('stop_loss', 0) or 0):,.2f}"),
+                    ("الهدف الأول", f"{float(plan.get('target_1', 0) or 0):,.2f}"),
+                    ("الهدف الثاني", f"{float(plan.get('target_2', 0) or 0):,.2f}"),
+                    ("العائد/المخاطرة", str(plan.get('rr_ratio', ''))),
+                    ("السيولة", str(plan.get('liquidity', ''))),
+                ]},
+                {"title": "عوامل التقاء الإشارات", "lines": [
+                    f"{_factor['name']} ({_factor['group']}): {_factor['note']}"
+                    for _factor in confluence.get("factors", [])
+                ]},
+            ]
+            st.download_button("⬇️ تنزيل تقرير التحليل (HTML — قابل للطباعة PDF)",
+                               _render_report(symbol, company_name, _rep_sections).encode("utf-8"),
+                               f"{symbol.replace('.CA', '')}_report.html", "text/html", width="stretch")
+        except Exception:
+            pass
 
         # ===== الرسم المباشر الاحترافي — محرك TradingView (نفس محرك ثاندر والمنصات العالمية) =====
         st.markdown("#### 📊 الرسم المباشر التفاعلي")
@@ -2195,6 +2229,126 @@ with tab_learn:
     with st.expander("🎯 الفرصة الحقيقية = توافق (Confluence)"):
         st.markdown("لا تدخل بإشارة واحدة. انتظر توافق عدة أبعاد مستقلة: اتجاه + زخم + حجم + نموذج + "
                     "عائد/مخاطرة جيد + سيولة + مالي سليم. تبويب «التداول والقرار» يعرض «درجة التوافق» تلقائياً لكل سهم.")
+
+# ============================================================
+# TAB: الرئيسية (لوحة القيادة)
+# ============================================================
+with tab_home:
+    st.markdown("#### 🏠 لوحة القيادة — كل ما يهمك في مكان واحد")
+    indices_row()
+    st.markdown("---")
+    _macro_h = macro.fetch_macro()
+    if _macro_h:
+        _reg = macro.regime(_macro_h)
+        st.markdown(f'<div class="regime-banner" style="border-color:{_reg["color"]};"><b style="color:{_reg["color"]};">{_reg["label"]}</b><small>{_reg["desc"]}</small></div>', unsafe_allow_html=True)
+    st.markdown("---")
+    _h1, _h2, _h3 = st.columns(3)
+    _snap_home = tvd.snapshot()
+    with _h1:
+        st.markdown("##### 💼 محفظتك")
+        _pos = USER_STORE.get("portfolio", {})
+        if _pos:
+            _tv = _tc = 0.0
+            for _s, _p in _pos.items():
+                _r = _snap_home.get(_s.replace(".CA", ""))
+                _px = _r["close"] if _r else float(_p["avg_cost"])
+                _tv += float(_p["shares"]) * _px
+                _tc += float(_p["shares"]) * float(_p["avg_cost"])
+            _pl = _tv - _tc
+            _plp = _pl / _tc * 100 if _tc else 0
+            st.metric("القيمة السوقية", f"{_tv:,.0f} ج.م")
+            st.metric("الربح/الخسارة", f"{_pl:+,.0f} ج.م", f"{_plp:+.2f}%")
+        else:
+            st.caption("لا توجد مراكز مسجّلة — من تبويب «محفظتي».")
+    with _h2:
+        st.markdown("##### ⭐ متابعتك")
+        _wl = USER_STORE.get("watchlist", [])
+        if _wl:
+            for _w in _wl[:6]:
+                _r = _snap_home.get(_w.replace(".CA", ""))
+                if _r:
+                    _cc = "#00e676" if _r["change_pct"] >= 0 else "#ff5c76"
+                    st.markdown(f'<div style="display:flex;justify-content:space-between;font-size:0.82rem;padding:0.2rem 0;border-bottom:1px solid rgba(31,45,69,.4);"><b>{_w.replace(".CA","")}</b><span>{_r["close"]:,.2f} <span style="color:{_cc};">{_r["change_pct"]:+.2f}%</span></span></div>', unsafe_allow_html=True)
+        else:
+            st.caption("قائمتك فارغة.")
+    with _h3:
+        st.markdown("##### 🔔 تنبيهاتك")
+        _al = USER_STORE.get("alerts", {})
+        if _al:
+            for _s, _a in _al.items():
+                _parts = []
+                if _a.get("above"):
+                    _parts.append(f"فوق {_a['above']:,.2f}")
+                if _a.get("below"):
+                    _parts.append(f"تحت {_a['below']:,.2f}")
+                st.caption(f"**{_s.replace('.CA','')}**: " + " / ".join(_parts))
+        else:
+            st.caption("لا توجد تنبيهات — من تبويب «المتابعة».")
+
+# ============================================================
+# TAB: الأداء (سجل التوصيات)
+# ============================================================
+with tab_perf:
+    st.subheader("📈 سجل الأداء — المنصة تقيس نفسها بالأرقام")
+    st.caption("كل توصية عالية الثقة تُسجَّل بسعرها وتاريخها، وهنا نعرض نتيجتها الفعلية — دليل ملموس لا وعود.")
+    from modules.performance_track import evaluate as _eval_perf
+    _snap_perf = tvd.snapshot()
+    _prices_perf = {f"{_s}.CA": _r["close"] for _s, _r in _snap_perf.items()}
+    _perf = _eval_perf(USER_STORE.get("rec_log", []), _prices_perf)
+    _ps = _perf["summary"]
+    if _ps["total"] == 0:
+        st.info("السجل فارغ — سيُملأ تلقائياً عند ظهور فرص عالية الثقة في تبويب «الفرص».")
+    else:
+        _m1, _m2, _m3, _m4, _m5 = st.columns(5)
+        _m1.metric("إجمالي التوصيات", _ps["total"])
+        _m2.metric("مُغلقة", _ps["closed"])
+        _m3.metric("نسبة النجاح الفعلية", f"{_ps['win_rate']}%" if _ps["win_rate"] is not None else "—")
+        _m4.metric("متوسط العائد", f"{_ps['avg_return']}%" if _ps["avg_return"] is not None else "—")
+        _m5.metric("جارية", _ps["running"])
+        if _ps["closed"]:
+            _b1, _b2 = st.columns(2)
+            _b1.metric("أفضل صفقة", f"{_ps['best']}%")
+            _b2.metric("أسوأ صفقة", f"{_ps['worst']}%")
+        st.dataframe(pd.DataFrame(_perf["rows"]), width="stretch", hide_index=True, height=380,
+            column_config={
+                "entry": st.column_config.NumberColumn("دخول", format="%.2f"),
+                "now": st.column_config.NumberColumn("الآن", format="%.2f"),
+                "ret": st.column_config.NumberColumn("العائد%", format="%+.2f%%"),
+                "score": st.column_config.NumberColumn("الدرجة", format="%d"),
+            })
+        st.caption("⚠️ نسبة النجاح تُحسب على التوصيات المُغلقة (ضرب الوقف أو حققت الهدف) — الجارية لا تُحتسب.")
+
+# ============================================================
+# TAB: المخاطر (المحفظة)
+# ============================================================
+with tab_risk:
+    st.subheader("🛡️ لوحة المخاطر — مخاطر محفظتك")
+    st.caption("تحليل تركّز المراكز والقطاعات ودرجة التنويع — لحماية رأس المال قبل التفكير في الربح.")
+    from modules.risk_dashboard import analyze as _analyze_risk
+    _snap_risk = tvd.snapshot()
+    _prices_risk = {f"{_s}.CA": _r["close"] for _s, _r in _snap_risk.items()}
+    _sectors_risk = {_s: sector_of(_s) for _s in USER_STORE.get("portfolio", {})}
+    _risk = _analyze_risk(USER_STORE.get("portfolio", {}), _prices_risk, _sectors_risk)
+    if _risk.get("empty"):
+        st.info("لا توجد مراكز — سجّل صفقاتك في تبويب «محفظتي» لتحليل المخاطر.")
+    else:
+        _r1, _r2, _r3 = st.columns(3)
+        _r1.metric("عدد المراكز", _risk["count"])
+        _r2.metric("درجة التنويع", f"{_risk['diversification']}%")
+        _r3.metric("أكبر مركز", f"{_risk['top_weight']}%")
+        if _risk["warnings"]:
+            for _warn in _risk["warnings"]:
+                st.warning(_warn)
+        else:
+            st.success("لا توجد تحذيرات تركّز — محفظتك موزّعة جيداً.")
+        st.markdown("##### 🧩 توزيع القطاعات")
+        st.dataframe(pd.DataFrame(_risk["sectors"]), width="stretch", hide_index=True,
+            column_config={"value": st.column_config.NumberColumn("القيمة", format="%,.0f"),
+                           "weight": st.column_config.ProgressColumn("الوزن%", min_value=0, max_value=100, format="%.1f%%")})
+        st.markdown("##### 📋 المراكز بالأوزان")
+        st.dataframe(pd.DataFrame(_risk["items"]), width="stretch", hide_index=True,
+            column_config={"value": st.column_config.NumberColumn("القيمة", format="%,.0f"),
+                           "weight": st.column_config.ProgressColumn("الوزن%", min_value=0, max_value=100, format="%.1f%%")})
 
 # ============================================================
 # Footer

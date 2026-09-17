@@ -132,6 +132,29 @@ def t_signal_series():
     assert not (d["sig_buy"] & d["sig_sell"]).any()
 
 
+def t_performance_track():
+    from modules.performance_track import evaluate
+    recs = [{"symbol": "A.CA", "entry": 100, "stop": 95, "t1": 110, "date": "2026-01-01"},
+            {"symbol": "B.CA", "entry": 50, "stop": 45, "t1": 60, "date": "2026-01-02"}]
+    s = evaluate(recs, {"A.CA": 112, "B.CA": 44})["summary"]
+    assert s["closed"] == 2 and s["wins"] == 1 and s["losses"] == 1
+    assert s["win_rate"] == 50.0
+
+
+def t_risk_dashboard():
+    from modules.risk_dashboard import analyze
+    r = analyze({"A.CA": {"shares": 100, "avg_cost": 10}}, {"A.CA": 12}, {"A.CA": "بنوك"})
+    assert r["count"] == 1 and r["top_weight"] == 100.0
+    assert analyze({}, {}, {}).get("empty")
+
+
+def t_report_export():
+    from modules.report_export import render
+    h = render("COMI.CA", "CIB", [{"title": "السعر", "items": [("الآن", 120)]},
+                                  {"title": "ملاحظات", "lines": ["نقطة"]}])
+    assert "COMI" in h and "<!DOCTYPE html>" in h
+
+
 def t_theories():
     from modules.theories import dow_analysis, elliott_analysis, fibonacci_levels
     d = _synth(200)
@@ -172,6 +195,9 @@ check("signal series", t_signal_series)
 check("confluence", t_confluence)
 check("theories", t_theories)
 check("time analysis", t_time_analysis)
+check("performance track", t_performance_track)
+check("risk dashboard", t_risk_dashboard)
+check("report export", t_report_export)
 
 print("")
 print("=" * 50)
