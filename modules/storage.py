@@ -13,6 +13,7 @@ DEFAULT_STORE = {
     "rec_log": [],            # سجل التوصيات الموثق: {id, symbol, name, entry, stop, t1, score, date, note}
     "last_seen": {},
     "settings": {"capital": 100000, "risk_pct": 2.0, "max_pct": 10.0},
+    "alert_fired": {},  # symbol -> {"above": "YYYY-MM-DD", "below": "YYYY-MM-DD"} لمنع تكرار الإشعار
 }
 
 
@@ -121,3 +122,13 @@ def sell_position(store, symbol, shares):
         del store["portfolio"][symbol]
     save_store(store)
     return True
+
+
+def mark_alert_fired(store, symbol, direction, date_str):
+    """تسجيل أن تنبيهاً أُرسل اليوم في اتجاه معيّن (above/below) لمنع تكراره."""
+    store.setdefault("alert_fired", {}).setdefault(symbol, {})[direction] = date_str
+    save_store(store)
+
+
+def alert_fired_today(store, symbol, direction, date_str) -> bool:
+    return store.get("alert_fired", {}).get(symbol, {}).get(direction) == date_str

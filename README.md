@@ -24,18 +24,11 @@
 pip install -r requirements.txt
 ```
 
-### الواجهة الكاملة (Streamlit)
+### التشغيل (واجهة واحدة)
 ```bash
 python -m streamlit run app.py
 ```
 أو مباشرة بـ `run.bat` — ثم افتح `http://localhost:8501`
-
-### بوابة الويب الاحترافية (FastAPI + واجهة JS)
-```bash
-python -m uvicorn webapp.server:app --host 127.0.0.1 --port 8000
-```
-أو مباشرة بـ `run_webapp.bat` — ثم افتح `http://localhost:8000`
-(صفحة سوق رئيسية + صفحة تحليل لكل سهم + APIs للأسعار اللحظية والتحليل)
 
 ### محرك الاحتمالات المدرب (اختياري — يعمل تلقائياً إن وُجد النموذج)
 ```bash
@@ -47,6 +40,16 @@ python ml_train.py 80        # تدريب على أكبر 80 سهماً (اخت�
 python daily_report.py                  # إنشاء فوري
 register_morning_report.bat             # تسجيل مهمة يومية 9:30 (الأحد-الخميس)
 ```
+
+### 🔔 تنبيهات الأسعار وإشعاراتها
+```bash
+python alerts_check.py                  # فحص يدوي للتنبيهات وإرسال الإشعارات
+```
+المنصة تعرض التنبيهات داخل واجهة Streamlit، و`alerts_check.py` يرسل الإشعارات الخارجية (Telegram / Webhook / سجل محلي). لتشغيله تلقائياً كل 5 دقائق:
+```powershell
+schtasks /Create /TN "EGX Alerts" /TR ""C:\...\python.exe" "C:\...lerts_check.py"" /SC MINUTE /MO 5 /F
+```
+قنوات الإشعار عبر متغيرات البيئة: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` أو `WEBHOOK_URL`.
 
 ## 🧭 التبويبات
 
@@ -65,15 +68,12 @@ EGX Pro/
 ├── app.py                  # الواجهة الرئيسية (Streamlit)
 ├── ml_train.py             # تدريب محرك الاحتمالات (ML)
 ├── daily_report.py         # مُشغّل التقرير الصباحي
-├── run.bat                 # تشغيل واجهة Streamlit
-├── run_webapp.bat          # تشغيل بوابة الويب (FastAPI)
+├── run.bat                 # تشغيل المنصة
 ├── register_morning_report.bat  # تسجيل مهمة التقرير الصباحي 9:30
+├── alerts_check.py         # فحص التنبيهات وإرسال الإشعارات الخارجية
 ├── requirements.txt
 ├── models/                 # نموذج ML المدرب (egx_ml.joblib)
 ├── reports/                # التقارير الصباحية المحفوظة
-├── webapp/                 # بوابة الويب (FastAPI + JS)
-│   ├── server.py           # الـ APIs
-│   └── static/             # index.html / stock.html / app.js / stock.js / style.css
 ├── tests/                  # اختبارات الدخان (smoke tests)
 └── modules/
     ├── tv_data.py          # الأسعار اللحظية الرسمية من TradingView Scanner
@@ -105,33 +105,7 @@ EGX Pro/
 
 **هذه الأداة للاسترشاد والتحليل فقط — ليست نصيحة استثمارية.**
 
-
-## 🌐 بوابة الويب — الصفحات
-
-بوابة الويب (`run_webapp.bat` → `http://localhost:8000`) تضم الآن:
-
-| الصفحة | المسار | المحتوى |
-|---|---|---|
-| 🏠 السوق | `/` | المؤشرات، السياق العالمي، التحركات، القطاعات، الأخبار |
-| 💡 الفرص | `/opportunities` | ترتيب آلي لأكبر الأسهم بالقوة الفنية (18 مؤشراً + نماذج + R:R) |
-| 💼 محفظتي | `/portfolio` | تسجيل مراكز + ربح/خسارة لحظي بأسعار TradingView |
-| ⭐ المتابعة | `/watchlist` | قائمة متابعة + تنبيهات سعرية |
-| 📊 تحليل سهم | `/stock/{رمز}` | شموع + مؤشرات + خطة صفقة + احتمالية ML + أخبار |
-
-### 🔔 إشعارات التنبيهات السعرية
-عند وصول سهم متابَع لمستوى التنبيه، ترسل المنصة إشعاراً عبر:
-1. **Telegram** — اضبط متغيرات البيئة `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
-2. **Webhook** — اضبط `WEBHOOK_URL` (أي خدمة HTTP تستقبل JSON)
-
-بدون أي ضبط، تُسجّل الإشعارات محلياً (لا تفشل أبداً). مثال ضبط في PowerShell:
-```powershell
-$env:TELEGRAM_BOT_TOKEN="123456:ABC..."
-$env:TELEGRAM_CHAT_ID="123456789"
-python -m uvicorn webapp.server:app --port 8000
-```
-
-### 🧪 الاختبارات و CI
-```bash
+## 🧪 الاختبارات و CI
+\\ash
 python tests/smoke_test.py          # اختبارات دخان سريعة (بدون إنترنت)
-```
-يوجد سير عمل GitHub Actions (`.github/workflows/ci.yml`) يشغّل الاختبارات وفحص الصياغة تلقائياً على كل push.
+\يوجد سير عمل GitHub Actions (\.github/workflows/ci.yml\) يشغّل الاختبارات وفحص الصياغة تلقائياً على كل push.

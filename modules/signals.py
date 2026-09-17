@@ -475,3 +475,35 @@ def get_intraday_levels(df: pd.DataFrame) -> dict:
         }
     except:
         return {}
+
+
+def signal_series(df: pd.DataFrame, buy_rsi_max: float = 55.0,
+                  sell_rsi_min: float = 70.0) -> pd.DataFrame:
+    """إشارة شراء/بيع لكل شمعة (لرسم العلامات التاريخية) — نسخة متجهة خفيفة.
+
+    القاعدة الافتراضية:
+      - شراء : MACD > Signal  و  RSI < 55
+      - بيع   : MACD < Signal  و  RSI > 70
+    نأخذ أول شمعة فقط من كل نوبة متتالية (منع تكرار الإشارة).
+    يضيف عمودَي sig_buy / sig_sell (قيم منطقية).
+    """
+    df = df.copy()
+    if "MACD" not in df.columns or "MACD_Signal" not in df.columns:
+        df["sig_buy"] = False
+        df["sig_sell"] = False
+        return df
+
+    macd = df["MACD"]
+    sig = df["MACD_Signal"]
+    rsi = df["RSI"] if "RSI" in df.columns else pd.Series(50.0, index=df.index)
+
+    bull = (macd > sig) & (rsi < buy_rsi_max)
+    bear = (macd < sig) & (rsi > sell_rsi_min)
+
+    def first_of_run(mask):
+        m = mask.fillna(False).astype(bool)
+        return m & (~m.shift(1).fillna(False))
+
+    df["sig_buy"] = first_of_run(bull)
+    df["sig_sell"] = first_of_run(bear)
+    return df

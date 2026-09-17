@@ -19,13 +19,13 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: تثبيت المتطلبات
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: فحص الصياغة (compile)
-        run: python -m compileall -q app.py daily_report.py ml_train.py webapp modules tests
+      - name: Compile check
+        run: python -m compileall -q app.py daily_report.py ml_train.py alerts_check.py modules tests
 
-      - name: تشغيل الاختبارات
+      - name: Run smoke tests
         run: python -X utf8 tests/smoke_test.py

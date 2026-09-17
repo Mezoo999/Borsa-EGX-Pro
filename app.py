@@ -24,7 +24,7 @@ from modules.technical import add_indicators, get_last_signals, calculate_vwap_s
 from modules.fundamental import analyze_fundamental, calculate_valuation_summary
 from modules.signals import (generate_signal, generate_scalp_signal, generate_combined_signal,
                              get_support_resistance, get_intraday_levels,
-                             calculate_technical_score, calculate_price_targets)
+                             calculate_technical_score, calculate_price_targets, signal_series)
 from modules.risk import calculate_atr_based_stops, position_sizing, risk_score
 from modules.screener import build_screener, market_summary
 from modules.backtest import backtest_signals
@@ -305,6 +305,52 @@ def indices_row():
         </div>
         """, unsafe_allow_html=True)
     st.caption("المؤشرات الرسمية — المصدر: TradingView")
+
+
+def all_market_live():
+    """جدول كل السوق (أسعار لحظية — كل ~285 سهماً) من TradingView، بدون تحميل تاريخ."""
+    snap = tvd.snapshot()
+    reg = symbol_registry()
+    if not snap:
+        st.caption("جاري تحميل أسعار السوق اللحظية...")
+        return
+    rows = []
+    for sym, r in snap.items():
+        key = f"{sym}.CA"
+        meta = reg.get(key, {})
+        rows.append({
+            "الرمز": sym,
+            "الشركة": meta.get("name") or r.get("name_tv", sym),
+            "القطاع": meta.get("sector", "") or "أخرى",
+            "السعر": round(r["close"], 2),
+            "التغير%": round(r["change_pct"], 2),
+            "الحجم": int(r.get("volume", 0) or 0),
+            "القيمة السوقية (م.ج)": round((r.get("market_cap") or 0) / 1e6, 0),
+        })
+    df_all = (pd.DataFrame(rows)
+              .sort_values("القيمة السوقية (م.ج)", ascending=False)
+              .reset_index(drop=True))
+    q = st.text_input("🔍 بحث في كل السوق (رمز أو اسم)", key="all_mkt_q",
+                      placeholder="مثال: COMI أو البنك التجاري")
+    if q:
+        ql = q.strip().lower()
+        df_all = df_all[df_all["الرمز"].str.lower().str.contains(ql)
+                        | df_all["الشركة"].str.lower().str.contains(ql)]
+    st.caption(f"🟢 {len(snap)} سهماً متداولاً — أسعار لحظية من TradingView (متأخرة ~15 دقيقة)")
+    st.dataframe(df_all, use_container_width=True, hide_index=True, height=440,
+        column_config={
+            "السعر": st.column_config.NumberColumn(format="%.2f"),
+            "التغير%": st.column_config.NumberColumn(format="%+.2f%%"),
+            "الحجم": st.column_config.NumberColumn(format="%,d"),
+            "القيمة السوقية (م.ج)": st.column_config.NumberColumn(format="%,.0f"),
+        })
+    pick = st.selectbox("افتح تحليل سهم من كل السوق", options=df_all["الرمز"].tolist(),
+                        format_func=lambda s: f"{s} — {reg.get(s + '.CA', {}).get('name', s)}",
+                        key="all_mkt_pick")
+    if st.button("➡️ افتح التحليل المفصل", key="all_mkt_open", use_container_width=True):
+        st.session_state["selected_symbol"] = pick + ".CA"
+        st.rerun()
+
 
 AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
              "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
@@ -682,9 +728,10 @@ with tab_market:
                 if tv_live_m["close"] < float(df_m["Low"].iloc[-1]):
                     df_m.iloc[-1, df_m.columns.get_loc("Low")] = tv_live_m["close"]
             dfm = add_indicators(df_m)
-            # محرك TradingView المفتوح — كروس هير لحظي وإحساس تيرمنال كامل
-            charts.lightweight_candles(dfm, height=560)
-            st.caption(f"📊 {symbol.replace('.CA','')} — آخر 6 أشهر (شموع + حجم + متوسطات 20/50) — حرّك المؤشر لقراءة أي شمعة بدقة")
+            dfm = signal_series(dfm)  # أعمدة sig_buy/sig_sell لعلامات الشراء/البيع
+            # شموع + مؤشرات كاملة (EMA/Bollinger/Supertrend/VWMA20) + علامات شراء/بيع
+            charts.lightweight_candles_pro(dfm, height=580, title=symbol)
+            st.caption(f"📊 {symbol.replace('.CA','')} — آخر 6 أشهر: شموع + EMA9/21 + Bollinger + Supertrend + VWMA20 + علامات شراء/بيع (أخضر تحت = شراء، أحمر فوق = بيع)")
         else:
             st.error("تعذر تحميل بيانات هذا السهم")
 
@@ -738,6 +785,12 @@ with tab_market:
             st.caption("جاري حساب أداء القطاعات...")
     except Exception:
         st.caption("جاري حساب أداء القطاعات...")
+
+    st.markdown("---")
+
+    # ===== كل السوق (أسعار لحظية — تغطية كاملة ~285 سهماً) =====
+    st.markdown("#### 📈 كل السوق — أسعار لحظية (كل أسهم البورصة)")
+    all_market_live()
 
     st.markdown("---")
 

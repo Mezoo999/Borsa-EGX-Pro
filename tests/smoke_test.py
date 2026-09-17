@@ -124,6 +124,14 @@ def t_notify_enabled_false():
     assert notify.enabled() is False
 
 
+def t_signal_series():
+    from modules.technical import add_indicators
+    from modules.signals import signal_series
+    d = signal_series(add_indicators(_synth(300)))
+    assert "sig_buy" in d.columns and "sig_sell" in d.columns
+    assert not (d["sig_buy"] & d["sig_sell"]).any()
+
+
 check("technical", t_technical)
 check("indicator bounds", t_indicator_bounds)
 check("signals", t_signals)
@@ -135,6 +143,7 @@ check("sectors taxonomy", t_sectors_taxonomy)
 check("backtest threshold", t_backtest_threshold)
 check("notify fallback", t_notify_fallback)
 check("notify enabled", t_notify_enabled_false)
+check("signal series", t_signal_series)
 
 print("")
 print("=" * 50)
